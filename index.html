@@ -542,7 +542,8 @@ const ICONS = {
   aid: '<rect x="3.5" y="6.5" width="17" height="13" rx="2.5"/><path d="M9 6.5V4h6v2.5M12 10v6M9 13h6"/>',
   play: '<path d="M7 4.5v15l12.5-7.5z"/>',
   chevron: '<path d="M9.5 6l6 6-6 6"/>',
-  check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>'
+  check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
+  send: '<path d="M21 3.5 3 10.8l6.8 2.4L12.2 20z"/><path d="M9.8 13.2 21 3.5"/>'
 };
 function icon(name){
   return '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true">' + ICONS[name] + '</svg>';
@@ -739,9 +740,12 @@ let profile = null;
 let program = DEFAULT_PROGRAM;
 let quiz = null;
 let view = 'loading';
-let accessKey = '';
-try { accessKey = localStorage.getItem('appKey') || ''; } catch (e) {}
-let lockError = '';
+let session = null;
+try { session = JSON.parse(localStorage.getItem('session') || 'null'); } catch (e) {}
+// Telegram passes signed user data to a Mini App in the URL fragment.
+const TG_INIT_DATA = new URLSearchParams(location.hash.slice(1)).get('tgWebAppData');
+let botName = '';
+let loginError = '';
 let loadError = '';
 let saveFailed = false;
 let activeType = null;
@@ -992,7 +996,24 @@ async function saveProfile(){
 }
 
 function apiHeaders(){
-  return { 'Content-Type': 'application/json', 'X-App-Key': encodeURIComponent(accessKey) };
+  return { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (session ? session.token : '') };
+}
+function storeSession(s){
+  session = s;
+  try {
+    if (s) localStorage.setItem('session', JSON.stringify(s));
+    else localStorage.removeItem('session');
+  } catch (e) {}
+}
+async function authRequest(body){
+  const res = await fetch('/api/auth', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'Не удалось войти');
+  return { token: data.token, name: data.name };
 }
 function escapeHtml(s){
   return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -1000,7 +1021,7 @@ function escapeHtml(s){
 async function loadAll(){
   try{
     const res = await fetch('/api/data', { headers: apiHeaders() });
-    if (res.status === 401) return { status: 'locked' };
+    if (res.status === 401) return { status: 'login' };
     const data = await res.json().catch(() => ({}));
     if (!res.ok) return { status: 'error', message: data.error || 'Ошибка сервера ' + res.status };
     return {
@@ -1021,6 +1042,12 @@ async function saveAll(){
       headers: apiHeaders(),
       body: JSON.stringify({ sessions, overrides, profile })
     });
+    if (res.status === 401){
+      storeSession(null);
+      loginError = 'Сессия истекла — войдите снова';
+      showLogin();
+      return;
+    }
     if (!res.ok) throw new Error('bad status ' + res.status);
     if (saveFailed){ saveFailed = false; render(); }
   }catch(e){
@@ -1029,11 +1056,54 @@ async function saveAll(){
     render();
   }
 }
-async function unlock(){
-  accessKey = document.getElementById('keyInput').value.trim();
-  try { localStorage.setItem('appKey', accessKey); } catch (e) {}
-  await init();
-  if (view === 'locked'){ lockError = 'Неверный код'; render(); }
+async function showLogin(){
+  view = 'login';
+  render();
+  if (botName) return;
+  try {
+    const data = await fetch('/api/auth').then(r => r.json());
+    botName = data.bot || '';
+    if (!botName && data.error) loginError = data.error;
+  } catch (e) {}
+  if (view === 'login') render();
+}
+async function loginWithCode(){
+  const code = document.getElementById('codeInput').value.trim();
+  if (!code) return;
+  try {
+    storeSession(await authRequest({ code }));
+    loginError = '';
+    await init();
+  } catch (e) {
+    loginError = e.message;
+    render();
+  }
+}
+function logout(){
+  storeSession(null);
+  sessions = [];
+  overrides = {};
+  profile = null;
+  program = DEFAULT_PROGRAM;
+  loginError = '';
+  showLogin();
+}
+function setupTelegram(){
+  if (!TG_INIT_DATA) return;
+  const script = document.createElement('script');
+  script.src = 'https://telegram.org/js/telegram-web-app.js';
+  script.onload = () => {
+    const tg = window.Telegram && window.Telegram.WebApp;
+    if (!tg) return;
+    tg.ready();
+    tg.expand();
+    if (tg.isVersionAtLeast('6.1')){
+      tg.setHeaderColor('#000000');
+      tg.setBackgroundColor('#000000');
+    }
+    if (tg.isVersionAtLeast('7.7')) tg.disableVerticalSwipes();
+  };
+  document.head.appendChild(script);
 }
 function updateOverride(name, field, value){
   const num = parseInt(value, 10);
@@ -1390,8 +1460,16 @@ function renderSettings(){
     </div>
     <p class="lib-note">Тест не пройден — сейчас стандартная программа.</p>
   `;
+  const accountGroup = session ? `
+    <p class="section-title" style="margin-top:4px;">Аккаунт</p>
+    <div class="card list">
+      ${row('send', '#2AABEE', 'Telegram', escapeHtml(session.name || ''))}
+      ${TG_INIT_DATA ? '' : `<button class="row" onclick="logout()"><span class="row-body"><span class="row-label" style="color:var(--red)">Выйти</span></span></button>`}
+    </div>
+  ` : '';
   return `
-    <p class="section-title" style="margin-top:4px;">Профиль</p>
+    ${accountGroup}
+    <p class="section-title">Профиль</p>
     ${profileGroup}
     ${section('Тренировка A', program.A)}
     ${section('Тренировка B', program.B)}
@@ -1553,20 +1631,23 @@ function renderQuizResult(){
   `;
 }
 
-function renderLocked(){
+function renderLogin(){
+  const bot = escapeHtml(botName);
   return `
-    <p class="quiz-title">Вход</p>
-    <p class="quiz-sub">Введите код доступа. Он задаётся в настройках проекта на Vercel (переменная APP_KEY) и запоминается на этом устройстве.</p>
+    <p class="quiz-title">Вход через Telegram</p>
+    <p class="quiz-sub">Дневник работает через Telegram-бота. Откройте его и нажмите «Старт» — бот пришлёт кнопку, чтобы открыть дневник прямо в Telegram, и код для входа здесь.</p>
+    ${bot ? `<a class="btn btn-primary" href="https://t.me/${bot}" target="_blank" rel="noopener" style="text-decoration:none;">Открыть @${bot}</a>` : ''}
+    <p class="section-title">Код из бота</p>
     <div class="card list">
       <label class="row">
         <span class="row-body">
           <span class="row-label">Код</span>
-          <input type="password" id="keyInput" autocomplete="current-password" placeholder="обязательно" onkeydown="if (event.key === 'Enter') unlock()">
+          <input type="text" id="codeInput" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000" onkeydown="if (event.key === 'Enter') loginWithCode()">
         </span>
       </label>
     </div>
-    ${lockError ? `<p class="quiz-error">${lockError}</p>` : ''}
-    <button class="btn btn-primary" onclick="unlock()">Войти</button>
+    ${loginError ? `<p class="quiz-error">${escapeHtml(loginError)}</p>` : ''}
+    <button class="btn btn-outline" onclick="loginWithCode()">Войти</button>
   `;
 }
 
@@ -1586,7 +1667,7 @@ function render(){
     return;
   }
   const activeTab = view === 'workout' ? 'today' : view;
-  const bare = view === 'quiz' || view === 'locked' || view === 'error';
+  const bare = view === 'quiz' || view === 'login' || view === 'error';
   let body = '';
   if (view === 'today') body = renderToday();
   else if (view === 'workout') body = renderWorkout();
@@ -1595,7 +1676,7 @@ function render(){
   else if (view === 'history') body = renderHistory();
   else if (view === 'progress') body = renderProgress();
   else if (view === 'quiz') body = renderQuiz();
-  else if (view === 'locked') body = renderLocked();
+  else if (view === 'login') body = renderLogin();
   else if (view === 'error') body = renderLoadError();
   const banner = saveFailed ? `
     <div class="banner">
@@ -1609,14 +1690,27 @@ function render(){
 async function init(){
   view = 'loading';
   render();
+  if (TG_INIT_DATA){
+    try { storeSession(await authRequest({ initData: TG_INIT_DATA })); }
+    catch (e) { loginError = e.message; }
+  }
+  if (!session){
+    showLogin();
+    return;
+  }
   const data = await loadAll();
-  if (data.status !== 'ok'){
+  if (data.status === 'login'){
+    storeSession(null);
+    showLogin();
+    return;
+  }
+  if (data.status === 'error'){
     loadError = data.message || '';
-    view = data.status;
+    view = 'error';
     render();
     return;
   }
-  lockError = '';
+  loginError = '';
   sessions = data.sessions;
   overrides = data.overrides;
   profile = data.profile;
@@ -1624,6 +1718,7 @@ async function init(){
   view = 'today';
   render();
 }
+setupTelegram();
 init();
 </script>
 </body>

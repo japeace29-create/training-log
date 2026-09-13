@@ -27,4 +27,4 @@ async function kvSet(key, value) {
   return kvCommand(['SET', key, value]);
 }
 
-module.exports = { kvGet, kvSet };
+module.exports = { kvCommand, kvGet, kvSet };
