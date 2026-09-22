@@ -1,11 +1,16 @@
-const { kvGet, kvSet } = require('./_lib');
-
-const KEY = 'training-log:data';
+const { kvGet, kvSet, getAuthedChatId } = require('./_lib');
 
 module.exports = async (req, res) => {
   try {
+    const chatId = await getAuthedChatId(req);
+    if (!chatId) {
+      res.status(401).json({ error: 'Нужна авторизация — открой через бота или введи код' });
+      return;
+    }
+    const key = 'training-log:data:' + chatId;
+
     if (req.method === 'GET') {
-      const raw = await kvGet(KEY);
+      const raw = await kvGet(key);
       const data = raw ? JSON.parse(raw) : { sessions: [], overrides: {}, draft: null };
       res.status(200).json({
         sessions: Array.isArray(data.sessions) ? data.sessions : [],
@@ -22,7 +27,7 @@ module.exports = async (req, res) => {
         overrides: (payload.overrides && typeof payload.overrides === 'object') ? payload.overrides : {},
         draft: payload.draft || null
       };
-      await kvSet(KEY, JSON.stringify(data));
+      await kvSet(key, JSON.stringify(data));
       res.status(200).json({ ok: true });
       return;
     }
@@ -32,4 +37,5 @@ module.exports = async (req, res) => {
     res.status(500).json({ error: String(e && e.message || e) });
   }
 };
+
 

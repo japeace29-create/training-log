@@ -11,6 +11,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Дневник">
 <link rel="apple-touch-icon" href="icon.svg">
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&family=Quicksand:wght@600;700&display=swap" rel="stylesheet">
@@ -636,9 +637,24 @@ function targetText(cfg){
   return cfg.repsMin === cfg.repsMax ? (cfg.repsMin + ' ' + unit) : (cfg.repsMin + '–' + cfg.repsMax + ' ' + unit);
 }
 
+function tgInitData(){
+  try{
+    const wa = window.Telegram && window.Telegram.WebApp;
+    return (wa && wa.initData) ? wa.initData : null;
+  }catch(e){
+    return null;
+  }
+}
+function authHeader(){
+  const initData = tgInitData();
+  if (initData) return { 'Authorization': 'tma ' + initData };
+  const token = localStorage.getItem('training-log:token');
+  return token ? { 'Authorization': 'Bearer ' + token } : {};
+}
 async function loadAll(){
   try{
-    const res = await fetch('/api/data');
+    const res = await fetch('/api/data', { headers: authHeader() });
+    if (res.status === 401) return { unauthorized: true };
     if (!res.ok) throw new Error('bad status ' + res.status);
     const data = await res.json();
     return {
@@ -653,17 +669,50 @@ async function loadAll(){
 }
 async function saveAll(){
   try{
-    await fetch('/api/data', {
+    const res = await fetch('/api/data', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: Object.assign({ 'Content-Type': 'application/json' }, authHeader()),
       body: JSON.stringify({
         sessions,
         overrides,
         draft: activeType ? { type: activeType, exercises: draft } : null
       })
     });
+    if (res.status === 401){
+      localStorage.removeItem('training-log:token');
+      view = 'login';
+      render();
+    }
   }catch(e){
     console.error('Save error', e);
+  }
+}
+async function submitLoginCode(){
+  const input = document.getElementById('loginCodeInput');
+  const errEl = document.getElementById('loginError');
+  const code = (input.value || '').trim();
+  errEl.textContent = '';
+  if (!/^\d{6}$/.test(code)){
+    errEl.textContent = 'Код — это 6 цифр из бота';
+    return;
+  }
+  try{
+    const res = await fetch('/api/verify-code', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code })
+    });
+    const data = await res.json();
+    if (!res.ok || !data.token){
+      errEl.textContent = data.error || 'Код неверный';
+      return;
+    }
+    localStorage.setItem('training-log:token', data.token);
+    view = 'loading';
+    render();
+    await startApp();
+  }catch(e){
+    errEl.textContent = 'Ошибка сети, попробуй ещё раз';
   }
 }
 let saveTimer = null;
@@ -1052,10 +1101,31 @@ function renderProgress(){
   `;
 }
 
+function renderLogin(){
+  return `
+    <div class="card accent-edge">
+      <p class="eyebrow">Вход</p>
+      <p class="hero-type" style="font-size:24px;">Код из Telegram</p>
+      <p class="exercise-preview">Напиши /start своему боту-дневнику — он пришлёт код. Введи его сюда:</p>
+      <div class="set-row" style="margin-bottom:14px;">
+        <input id="loginCodeInput" type="text" inputmode="numeric" maxlength="6" placeholder="000000"
+          style="text-align:center; font-size:22px; letter-spacing:6px;"
+          onkeydown="if(event.key==='Enter') submitLoginCode()">
+      </div>
+      <button class="btn btn-primary" onclick="submitLoginCode()">Войти</button>
+      <p id="loginError" style="color:var(--accent-2); font-size:13px; margin-top:12px;"></p>
+    </div>
+  `;
+}
+
 function render(){
   const app = document.getElementById('app');
   if (view === 'loading'){
     app.innerHTML = renderHeader() + '<p class="empty">Загрузка…</p>';
+    return;
+  }
+  if (view === 'login'){
+    app.innerHTML = renderHeader() + renderLogin();
     return;
   }
   const activeTab = view === 'workout' ? 'today' : view;
@@ -1069,9 +1139,14 @@ function render(){
   app.innerHTML = renderHeader() + renderTabBar(activeTab) + body;
 }
 
-(async function init(){
-  render();
+async function startApp(){
   const data = await loadAll();
+  if (data.unauthorized){
+    localStorage.removeItem('training-log:token');
+    view = 'login';
+    render();
+    return;
+  }
   sessions = data.sessions;
   overrides = data.overrides;
   if (data.draft && data.draft.type && PROGRAM[data.draft.type] && Array.isArray(data.draft.exercises)){
@@ -1082,6 +1157,19 @@ function render(){
     view = 'today';
   }
   render();
+}
+
+(function init(){
+  try{ if (window.Telegram && window.Telegram.WebApp) window.Telegram.WebApp.ready(); }catch(e){}
+  render();
+  const inTelegram = !!tgInitData();
+  const hasToken = !!localStorage.getItem('training-log:token');
+  if (inTelegram || hasToken){
+    startApp();
+  } else {
+    view = 'login';
+    render();
+  }
 })();
 
 document.addEventListener('visibilitychange', () => {
