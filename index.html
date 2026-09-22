@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Дневник тренировок</title>
 <link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#0C0B0B">
+<meta name="theme-color" content="#000000">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -17,148 +17,113 @@
 <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&family=Quicksand:wght@600;700&display=swap" rel="stylesheet">
 <style>
   :root{
-    --glass: rgba(22,17,26,0.44);
-    --glass-strong: rgba(22,17,26,0.6);
-    --glass-soft: rgba(255,255,255,0.1);
-    --glass-border: rgba(255,255,255,0.3);
+    --bg:#000000;
+    --group:#1C1C1E;
+    --group-2:#2C2C2E;
+    --separator: rgba(84,84,88,0.65);
     --text:#FFFFFF;
-    --text-muted: rgba(255,255,255,0.7);
+    --text-secondary: rgba(235,235,245,0.6);
     --accent:#E63946;
     --accent-2:#FF6B5B;
     --success:#34D399;
     --success-text:#04160F;
-    --radius-s:14px;
-    --radius-l:26px;
+    --radius:14px;
     --font-display:-apple-system, BlinkMacSystemFont, 'SF Pro Rounded', 'Quicksand', sans-serif;
     --font-body:-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Nunito', sans-serif;
   }
   *{box-sizing:border-box;}
   html,body{margin:0;padding:0;}
   body{
-    background:#121116;
+    background:var(--bg);
     color:var(--text);
     font-family:var(--font-body);
-    line-height:1.45;
+    line-height:1.4;
     -webkit-font-smoothing:antialiased;
     min-height:100vh;
-    overflow-x:hidden;
-  }
-  .bg-scene{
-    position:fixed;
-    inset:0;
-    z-index:0;
-    width:100%;
-    height:100%;
-  }
-  .bg-scene svg{
-    width:100%;
-    height:100%;
-    display:block;
   }
   .wrap{
-    position:relative;
-    z-index:1;
     max-width:480px;
     margin:0 auto;
-    padding:22px 18px 40px;
+    padding:8px 0 40px;
   }
   header{
-    display:flex;
-    align-items:baseline;
-    justify-content:space-between;
-    margin-bottom:18px;
-    padding:14px 18px;
-    background:var(--glass);
-    backdrop-filter:blur(24px) saturate(180%);
-    -webkit-backdrop-filter:blur(24px) saturate(180%);
-    border:1px solid var(--glass-border);
-    border-radius:22px;
-    box-shadow:0 8px 26px rgba(0,0,0,0.25);
+    padding:8px 20px 20px;
   }
   h1{
     font-family:var(--font-display);
     font-weight:700;
-    font-size:19px;
+    font-size:28px;
     margin:0;
     color:var(--text);
-    text-shadow:0 1px 3px rgba(0,0,0,0.3);
   }
   header .date{
-    font-size:12px;
-    color:var(--text-muted);
+    display:block;
+    font-size:14px;
+    color:var(--text-secondary);
+    margin-top:2px;
     text-transform:capitalize;
-    white-space:nowrap;
+  }
+  .section-header{
+    margin:28px 20px 8px;
+    font-size:13px;
+    font-weight:500;
+    color:var(--text-secondary);
+    text-transform:uppercase;
+    letter-spacing:0.4px;
+  }
+  .wrap > .section-header:first-child,
+  header + .section-header{
+    margin-top:6px;
   }
   .card{
-    background:var(--glass);
-    backdrop-filter:blur(26px) saturate(180%);
-    -webkit-backdrop-filter:blur(26px) saturate(180%);
-    border:1px solid var(--glass-border);
-    border-radius:var(--radius-l);
-    padding:20px;
-    margin-bottom:16px;
-    box-shadow:0 10px 34px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.25);
-    position:relative;
+    background:var(--group);
+    border-radius:var(--radius);
+    margin:0 16px 24px;
     overflow:hidden;
   }
-  .card::before{
-    content:'';
-    position:absolute;
-    top:0; left:0; right:0;
-    height:46%;
-    background:linear-gradient(to bottom, rgba(255,255,255,0.16), rgba(255,255,255,0));
-    pointer-events:none;
-  }
-  .card.accent-edge{
-    border-left:3px solid var(--accent);
+  .card.hero{
+    padding:20px;
   }
   .eyebrow{
     font-size:12px;
-    color:var(--text-muted);
+    color:var(--text-secondary);
     margin:0 0 4px;
-    position:relative;
   }
   .hero-type{
     font-family:var(--font-display);
-    font-size:32px;
+    font-size:28px;
     font-weight:700;
     margin:0 0 6px;
-    position:relative;
-    text-shadow:0 1px 3px rgba(0,0,0,0.25);
   }
   .exercise-preview{
     font-size:13px;
-    color:var(--text-muted);
+    color:var(--text-secondary);
     margin:10px 0 16px;
-    position:relative;
   }
   .btn{
     display:inline-block;
     width:100%;
     text-align:center;
     padding:14px 16px;
-    border-radius:18px;
+    border-radius:12px;
     font-family:var(--font-body);
     font-weight:700;
     font-size:15px;
     border:1px solid transparent;
     cursor:pointer;
-    position:relative;
   }
   .btn-primary{
     background:linear-gradient(135deg, var(--accent), var(--accent-2));
     color:#fff;
-    box-shadow:0 8px 20px rgba(255,92,138,0.4);
   }
   .btn-outline{
-    background:var(--glass-soft);
-    backdrop-filter:blur(10px);
+    background:var(--group-2);
     color:var(--text);
-    border-color:var(--glass-border);
+    border-color:var(--separator);
   }
   .btn-ghost{
     background:transparent;
-    color:var(--text-muted);
+    color:var(--text-secondary);
     border:none;
     padding:8px 0;
     width:auto;
@@ -169,13 +134,14 @@
   .row-2{
     display:flex;
     gap:10px;
+    margin:0 16px 24px;
   }
   .row-2 .btn{flex:1;}
   .stats{
     display:flex;
     gap:14px;
-    margin-top:16px;
-    position:relative;
+    padding:16px;
+    border-top:1px solid var(--separator);
   }
   .stat{flex:1;}
   .stat .num{
@@ -186,27 +152,26 @@
   }
   .stat .lbl{
     font-size:12px;
-    color:var(--text-muted);
+    color:var(--text-secondary);
   }
   .strip{
     display:flex;
     gap:5px;
-    margin-top:14px;
     flex-wrap:wrap;
-    position:relative;
+    padding:14px 16px;
   }
   .day-sq{
     width:26px;
     height:26px;
-    border-radius:8px;
-    background:var(--glass-soft);
-    border:1px solid var(--glass-border);
+    border-radius:7px;
+    background:var(--group-2);
+    border:1px solid var(--separator);
     display:flex;
     align-items:center;
     justify-content:center;
     font-size:10px;
     font-weight:700;
-    color:var(--text-muted);
+    color:var(--text-secondary);
   }
   .day-sq.done{
     background:var(--success);
@@ -217,10 +182,10 @@
     box-shadow:0 0 0 2px var(--accent);
   }
   .exercise{
-    margin-bottom:22px;
-    position:relative;
+    padding:16px;
+    border-bottom:1px solid var(--separator);
   }
-  .exercise:last-child{margin-bottom:0;}
+  .exercise:last-child{border-bottom:none;}
   .exercise h3{
     font-family:var(--font-display);
     font-size:16px;
@@ -229,12 +194,12 @@
   }
   .exercise .target{
     font-size:12px;
-    color:var(--text-muted);
+    color:var(--text-secondary);
     margin:0 0 4px;
   }
   .exercise .last-time{
     font-size:12px;
-    color:var(--text-muted);
+    color:var(--text-secondary);
     margin:0 0 10px;
   }
   .ex-head{
@@ -252,9 +217,9 @@
     font-size:12px;
     font-weight:700;
     color:var(--text);
-    background:var(--glass-soft);
-    border:1px solid var(--glass-border);
-    border-radius:14px;
+    background:var(--group-2);
+    border:1px solid var(--separator);
+    border-radius:12px;
     padding:7px 10px;
     text-decoration:none;
     white-space:nowrap;
@@ -269,42 +234,28 @@
     justify-content:space-between;
     align-items:center;
     gap:10px;
-    padding:12px 0;
-    border-bottom:1px solid rgba(255,255,255,0.14);
-    position:relative;
+    padding:14px 16px;
+    border-bottom:1px solid var(--separator);
   }
-  .lib-row:last-child{
-    border-bottom:none;
-    padding-bottom:0;
-  }
-  .lib-row:first-child{
-    padding-top:0;
-  }
+  .lib-row:last-child{border-bottom:none;}
   .lib-name{
-    font-size:14px;
-    font-weight:700;
+    font-size:15px;
+    font-weight:500;
     margin-bottom:2px;
   }
   .lib-note{
     font-size:12px;
-    color:var(--text-muted);
-    margin:-4px 0 16px;
+    color:var(--text-secondary);
+    margin:-4px 16px 16px;
   }
   .cfg-row{
-    padding:14px 0;
-    border-bottom:1px solid rgba(255,255,255,0.14);
-    position:relative;
+    padding:14px 16px;
+    border-bottom:1px solid var(--separator);
   }
-  .cfg-row:last-child{
-    border-bottom:none;
-    padding-bottom:0;
-  }
-  .cfg-row:first-child{
-    padding-top:0;
-  }
+  .cfg-row:last-child{border-bottom:none;}
   .cfg-name{
-    font-size:14px;
-    font-weight:700;
+    font-size:15px;
+    font-weight:500;
     margin-bottom:10px;
   }
   .cfg-inputs{
@@ -314,16 +265,16 @@
   .cfg-inputs label{
     flex:1;
     font-size:11px;
-    color:var(--text-muted);
+    color:var(--text-secondary);
     display:flex;
     flex-direction:column;
     gap:4px;
   }
   .cfg-inputs input{
-    background:var(--glass-soft);
-    border:1px solid var(--glass-border);
+    background:var(--group-2);
+    border:1px solid var(--separator);
     color:var(--text);
-    border-radius:12px;
+    border-radius:10px;
     padding:8px;
     font-family:var(--font-body);
     font-size:14px;
@@ -339,33 +290,32 @@
     align-items:center;
     gap:8px;
     margin-bottom:7px;
-    position:relative;
   }
   .set-row .set-label{
     width:20px;
     font-size:12px;
-    color:var(--text-muted);
+    color:var(--text-secondary);
     font-variant-numeric:tabular-nums;
   }
   .set-row input{
-    background:var(--glass-soft);
-    border:1px solid var(--glass-border);
+    background:var(--group-2);
+    border:1px solid var(--separator);
     color:var(--text);
-    border-radius:12px;
+    border-radius:10px;
     padding:9px 8px;
     font-family:var(--font-body);
     font-size:14px;
     font-variant-numeric:tabular-nums;
     width:100%;
   }
-  .set-row input::placeholder{color:rgba(255,255,255,0.4);}
+  .set-row input::placeholder{color:rgba(255,255,255,0.35);}
   .set-row input:focus-visible{
     outline:2px solid var(--accent);
     outline-offset:1px;
   }
   .set-row .unit{
     font-size:12px;
-    color:var(--text-muted);
+    color:var(--text-secondary);
     width:22px;
   }
   .set-row .done-toggle{
@@ -373,9 +323,9 @@
     width:32px;
     height:32px;
     border-radius:50%;
-    border:1px solid var(--glass-border);
-    background:var(--glass-soft);
-    color:var(--text-muted);
+    border:1px solid var(--separator);
+    background:var(--group-2);
+    color:var(--text-secondary);
     cursor:pointer;
     font-size:15px;
     display:flex;
@@ -387,22 +337,18 @@
     border-color:var(--success);
     color:var(--success-text);
   }
-  .hist-item{
-    border:1px solid var(--glass-border);
-    background:var(--glass-soft);
-    border-radius:16px;
-    margin-bottom:8px;
-    overflow:hidden;
-  }
   .hist-item summary{
-    padding:12px 14px;
+    padding:14px 16px;
     cursor:pointer;
     display:flex;
     justify-content:space-between;
     align-items:center;
     font-size:14px;
     list-style:none;
+    border-bottom:1px solid var(--separator);
   }
+  .hist-item:last-child summary{border-bottom:none;}
+  .hist-item[open] summary{border-bottom:1px solid var(--separator);}
   .hist-item summary::-webkit-details-marker{display:none;}
   .hist-item summary .type-badge{
     font-family:var(--font-display);
@@ -410,55 +356,53 @@
     font-weight:700;
     color:var(--accent-2);
   }
-  .hist-body{
-    padding:0 14px 14px;
-    border-top:1px solid rgba(255,255,255,0.14);
+  .hist-item .hist-body{
+    padding:4px 16px 14px;
+    border-bottom:1px solid var(--separator);
   }
+  .hist-item:last-child .hist-body{border-bottom:none;}
   .hist-ex{
     font-size:13px;
     padding-top:10px;
   }
   .hist-ex b{font-weight:700;}
-  .hist-ex .sets-txt{color:var(--text-muted);}
+  .hist-ex .sets-txt{color:var(--text-secondary);}
   .progress-row{
     display:flex;
     justify-content:space-between;
-    padding:10px 0;
-    border-bottom:1px solid rgba(255,255,255,0.14);
+    padding:12px 16px;
+    border-bottom:1px solid var(--separator);
     font-size:14px;
-    position:relative;
   }
   .progress-row:last-child{border-bottom:none;}
   .progress-row .pname{color:var(--text);}
   .progress-row .pval{
-    color:var(--text-muted);
+    color:var(--text-secondary);
     font-variant-numeric:tabular-nums;
     text-align:right;
   }
   .empty{
-    color:var(--text-muted);
+    color:var(--text-secondary);
     font-size:14px;
     text-align:center;
     padding:24px 0;
   }
   .settings-link{
     text-align:center;
-    margin-top:24px;
-    position:relative;
+    margin:24px 16px 0;
   }
   .tabbar{
     position:relative;
     display:flex;
     justify-content:space-around;
     align-items:center;
-    margin-bottom:16px;
+    margin:0 16px 8px;
     padding:8px 4px;
-    background:var(--glass-strong);
+    background:rgba(28,28,30,0.85);
     backdrop-filter:blur(30px) saturate(180%);
     -webkit-backdrop-filter:blur(30px) saturate(180%);
-    border:1px solid var(--glass-border);
-    border-radius:26px;
-    box-shadow:0 12px 32px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.2);
+    border:1px solid var(--separator);
+    border-radius:var(--radius);
   }
   .tabbar button{
     background:none;
@@ -467,85 +411,23 @@
     flex-direction:column;
     align-items:center;
     gap:2px;
-    color:var(--text-muted);
+    color:var(--text-secondary);
     font-family:var(--font-body);
     font-size:10px;
     font-weight:700;
     padding:7px 6px;
-    border-radius:16px;
+    border-radius:10px;
     cursor:pointer;
     flex:1;
   }
   .tabbar button .icon{font-size:18px; line-height:1;}
   .tabbar button.active{
     color:var(--text);
-    background:rgba(255,255,255,0.16);
+    background:var(--group-2);
   }
-
 </style>
 </head>
 <body>
-<div class="bg-scene" aria-hidden="true">
-<svg viewBox="0 0 390 844" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <linearGradient id="bgGrad" x1="0" y1="0" x2="0.5" y2="1">
-      <stop offset="0%" stop-color="#242226"/>
-      <stop offset="50%" stop-color="#19181A"/>
-      <stop offset="100%" stop-color="#0C0B0B"/>
-    </linearGradient>
-    <radialGradient id="spotlight" cx="50%" cy="4%" r="55%">
-      <stop offset="0%" stop-color="#E63946" stop-opacity="0.3"/>
-      <stop offset="55%" stop-color="#E63946" stop-opacity="0.06"/>
-      <stop offset="100%" stop-color="#E63946" stop-opacity="0"/>
-    </radialGradient>
-    <pattern id="tileGrid" width="65" height="65" patternUnits="userSpaceOnUse">
-      <rect x="0.5" y="0.5" width="64" height="64" fill="none" stroke="#000000" stroke-opacity="0.55" stroke-width="1.5"/>
-      <rect x="1.5" y="1.5" width="62" height="62" fill="none" stroke="#ffffff" stroke-opacity="0.03" stroke-width="1"/>
-    </pattern>
-    <pattern id="speckle" width="40" height="40" patternUnits="userSpaceOnUse">
-      <circle cx="4" cy="7" r="1.4" fill="#ffffff" opacity="0.07"/>
-      <circle cx="17" cy="3" r="1" fill="#ffffff" opacity="0.05"/>
-      <circle cx="29" cy="12" r="1.8" fill="#E63946" opacity="0.14"/>
-      <circle cx="9" cy="19" r="1.1" fill="#ffffff" opacity="0.06"/>
-      <circle cx="24" cy="24" r="1.5" fill="#ffffff" opacity="0.08"/>
-      <circle cx="35" cy="30" r="1" fill="#ffffff" opacity="0.05"/>
-      <circle cx="14" cy="33" r="1.7" fill="#E63946" opacity="0.1"/>
-      <circle cx="2" cy="30" r="1.2" fill="#ffffff" opacity="0.06"/>
-      <circle cx="37" cy="6" r="1.3" fill="#ffffff" opacity="0.06"/>
-      <circle cx="21" cy="37" r="1" fill="#ffffff" opacity="0.05"/>
-    </pattern>
-  </defs>
-  <rect x="0" y="0" width="390" height="844" fill="url(#bgGrad)"/>
-  <rect x="0" y="0" width="390" height="844" fill="url(#tileGrid)"/>
-  <rect x="0" y="0" width="390" height="844" fill="url(#speckle)"/>
-  <rect x="0" y="0" width="390" height="844" fill="url(#spotlight)"/>
-
-  <!-- lifting platform outline painted on the rubber floor -->
-  <rect x="38" y="470" width="314" height="330" fill="none" stroke="#E63946" stroke-opacity="0.3" stroke-width="3"/>
-  <rect x="46" y="478" width="298" height="314" fill="none" stroke="#ffffff" stroke-opacity="0.05" stroke-width="1.5"/>
-
-  <!-- barbell resting on the platform -->
-  <g transform="rotate(-8 195 760)" opacity="0.55">
-    <rect x="70" y="756" width="230" height="7" rx="3.5" fill="#3F3E42"/>
-    <circle cx="66" cy="759.5" r="24" fill="#151415" stroke="#E63946" stroke-opacity="0.4" stroke-width="3"/>
-    <circle cx="66" cy="759.5" r="9" fill="#2A2A2C"/>
-    <circle cx="304" cy="759.5" r="18" fill="#151415" stroke="#ffffff" stroke-opacity="0.15" stroke-width="3"/>
-    <circle cx="304" cy="759.5" r="7" fill="#2A2A2C"/>
-  </g>
-
-  <!-- dumbbell nearby -->
-  <g transform="rotate(12 90 590)" opacity="0.4">
-    <rect x="72" y="586" width="36" height="8" rx="4" fill="#3F3E42"/>
-    <circle cx="70" cy="590" r="13" fill="#151415" stroke="#ffffff" stroke-opacity="0.12" stroke-width="2.5"/>
-    <circle cx="110" cy="590" r="13" fill="#151415" stroke="#ffffff" stroke-opacity="0.12" stroke-width="2.5"/>
-  </g>
-
-  <!-- weight plates leaning in the corner -->
-  <circle cx="-20" cy="130" r="110" fill="none" stroke="#E63946" stroke-opacity="0.1" stroke-width="12"/>
-  <circle cx="-20" cy="130" r="76" fill="none" stroke="#ffffff" stroke-opacity="0.04" stroke-width="7"/>
-</svg>
-</div>
-
 <div class="wrap" id="app"></div>
 
 <script>
@@ -871,7 +753,7 @@ function renderHeader(){
   return `
     <header>
       <h1>🐾 Дневник тренировок</h1>
-      <div class="date">${formatDateRu(todayStr())}</div>
+      <span class="date">${formatDateRu(todayStr())}</span>
     </header>
   `;
 }
@@ -899,8 +781,9 @@ function renderToday(){
   let heroHtml;
   if (done){
     heroHtml = `
-      <div class="card accent-edge">
-        <p class="eyebrow">Сегодня выполнено</p>
+      <p class="section-header">Сегодня</p>
+      <div class="card hero">
+        <p class="eyebrow">Выполнено</p>
         <p class="hero-type">${TYPE_LABELS[done.type]}</p>
         <p class="exercise-preview">${PROGRAM[done.type].map(e=>e.name).join(' · ')}</p>
         <button class="btn btn-outline" onclick="editToday()">Изменить запись</button>
@@ -908,7 +791,8 @@ function renderToday(){
     `;
   } else if (inProgress){
     heroHtml = `
-      <div class="card accent-edge">
+      <p class="section-header">Сегодня</p>
+      <div class="card hero">
         <p class="eyebrow">Тренировка в процессе</p>
         <p class="hero-type">${TYPE_LABELS[activeType]}</p>
         <p class="exercise-preview">${draft.map(e=>e.name).join(' · ')}</p>
@@ -917,7 +801,8 @@ function renderToday(){
     `;
   } else {
     heroHtml = `
-      <div class="card accent-edge">
+      <p class="section-header">Сегодня</p>
+      <div class="card hero">
         <p class="eyebrow">Следующая тренировка</p>
         <p class="hero-type">${TYPE_LABELS[type]}</p>
         <p class="exercise-preview">${PROGRAM[type].map(e=>e.name).join(' · ')}</p>
@@ -930,8 +815,9 @@ function renderToday(){
   const strip = monthGridHtml(monthGrid(now.getFullYear(), now.getMonth()));
 
   return `
+    ${heroHtml}
+    <p class="section-header">${monthName(now.getFullYear(), now.getMonth())}</p>
     <div class="card">
-      <p class="eyebrow" style="margin-bottom:10px;">${monthName(now.getFullYear(), now.getMonth())}</p>
       <div class="strip">${strip}</div>
       <div class="stats">
         <div class="stat"><div class="num">${sessions.length}</div><div class="lbl">тренировок всего</div></div>
@@ -939,10 +825,8 @@ function renderToday(){
         <div class="stat"><div class="num">${countB}</div><div class="lbl">тип B</div></div>
       </div>
     </div>
-    ${heroHtml}
   `;
 }
-
 
 function renderWorkout(){
   const exercisesHtml = draft.map((ex, exIdx) => {
@@ -987,8 +871,8 @@ function renderWorkout(){
   }).join('');
 
   return `
+    <p class="section-header">${TYPE_LABELS[activeType]}</p>
     <div class="card">
-      <p class="eyebrow">${TYPE_LABELS[activeType]}</p>
       ${exercisesHtml}
     </div>
     <div class="row-2">
@@ -1000,8 +884,8 @@ function renderWorkout(){
 
 function renderExercises(){
   const section = (label, list) => `
+    <p class="section-header">${label}</p>
     <div class="card">
-      <p class="eyebrow" style="margin-bottom:6px;">${label}</p>
       ${list.map(ex => {
         const cfg = getConfig(ex);
         return `
@@ -1025,8 +909,8 @@ function renderExercises(){
 
 function renderSettings(){
   const section = (label, list) => `
+    <p class="section-header">${label}</p>
     <div class="card">
-      <p class="eyebrow" style="margin-bottom:6px;">${label}</p>
       ${list.map(ex => {
         const cfg = getConfig(ex);
         return `
@@ -1066,8 +950,8 @@ function renderHistory(){
     return `<div class="card"><p class="empty">Пока нет записанных тренировок</p></div>`;
   }
   const monthCards = pastMonths().map(m => `
+    <p class="section-header">${monthName(m.year, m.month)}</p>
     <div class="card">
-      <p class="eyebrow" style="margin-bottom:10px;">${monthName(m.year, m.month)}</p>
       <div class="strip">${monthGridHtml(monthGrid(m.year, m.month))}</div>
     </div>
   `).join('');
@@ -1086,7 +970,11 @@ function renderHistory(){
       </details>
     `;
   }).join('');
-  return monthCards + items;
+  return `
+    ${monthCards}
+    <p class="section-header">Все тренировки</p>
+    <div class="card">${items}</div>
+  `;
 }
 
 function renderProgress(){
@@ -1103,6 +991,7 @@ function renderProgress(){
     return `<div class="progress-row"><span class="pname">${ex.name}</span><span class="pval">${val}</span></div>`;
   }).join('');
   return `
+    <p class="section-header">Лучшие результаты</p>
     <div class="card">${rows}</div>
     <div class="settings-link">
       <button class="btn-ghost" onclick="resetAll()">${resetArmed ? 'Точно удалить всё? Нажми ещё раз' : 'Сбросить все данные'}</button>
@@ -1112,9 +1001,9 @@ function renderProgress(){
 
 function renderLogin(){
   return `
-    <div class="card accent-edge">
-      <p class="eyebrow">Вход</p>
-      <p class="hero-type" style="font-size:24px;">Код из Telegram</p>
+    <p class="section-header">Вход</p>
+    <div class="card hero">
+      <p class="hero-type" style="font-size:22px;">Код из Telegram</p>
       <p class="exercise-preview">Напиши /start своему боту-дневнику — он пришлёт код. Введи его сюда:</p>
       <div class="set-row" style="margin-bottom:14px;">
         <input id="loginCodeInput" type="text" inputmode="numeric" maxlength="6" placeholder="000000"
