@@ -645,11 +645,30 @@ function tgInitData(){
     return null;
   }
 }
+function getToken(){
+  return localStorage.getItem('training-log:token');
+}
 function authHeader(){
-  const initData = tgInitData();
-  if (initData) return { 'Authorization': 'tma ' + initData };
-  const token = localStorage.getItem('training-log:token');
+  const token = getToken();
   return token ? { 'Authorization': 'Bearer ' + token } : {};
+}
+async function exchangeForToken(payload){
+  try{
+    const res = await fetch('/api/auth', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (res.ok && data.token){
+      localStorage.setItem('training-log:token', data.token);
+      return true;
+    }
+    return false;
+  }catch(e){
+    console.error('Auth error', e);
+    return false;
+  }
 }
 async function loadAll(){
   try{
@@ -696,24 +715,14 @@ async function submitLoginCode(){
     errEl.textContent = 'Код — это 6 цифр из бота';
     return;
   }
-  try{
-    const res = await fetch('/api/verify-code', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code })
-    });
-    const data = await res.json();
-    if (!res.ok || !data.token){
-      errEl.textContent = data.error || 'Код неверный';
-      return;
-    }
-    localStorage.setItem('training-log:token', data.token);
-    view = 'loading';
-    render();
-    await startApp();
-  }catch(e){
-    errEl.textContent = 'Ошибка сети, попробуй ещё раз';
+  const ok = await exchangeForToken({ code });
+  if (!ok){
+    errEl.textContent = 'Код неверный или устарел — напиши боту /start ещё раз';
+    return;
   }
+  view = 'loading';
+  render();
+  await startApp();
 }
 let saveTimer = null;
 function scheduleSave(){
@@ -1159,13 +1168,15 @@ async function startApp(){
   render();
 }
 
-(function init(){
+(async function init(){
   try{ if (window.Telegram && window.Telegram.WebApp) window.Telegram.WebApp.ready(); }catch(e){}
   render();
-  const inTelegram = !!tgInitData();
-  const hasToken = !!localStorage.getItem('training-log:token');
-  if (inTelegram || hasToken){
-    startApp();
+  if (!getToken()){
+    const initData = tgInitData();
+    if (initData) await exchangeForToken({ initData });
+  }
+  if (getToken()){
+    await startApp();
   } else {
     view = 'login';
     render();

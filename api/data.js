@@ -1,13 +1,14 @@
-const { kvGet, kvSet, getAuthedChatId } = require('./_lib');
+const { kvGet, kvSet } = require('./_lib');
+const { userIdFromRequest } = require('./_auth');
 
 module.exports = async (req, res) => {
   try {
-    const chatId = await getAuthedChatId(req);
-    if (!chatId) {
+    const userId = userIdFromRequest(req);
+    if (!userId) {
       res.status(401).json({ error: 'Нужна авторизация — открой через бота или введи код' });
       return;
     }
-    const key = 'training-log:data:' + chatId;
+    const key = 'training-log:data:' + userId;
 
     if (req.method === 'GET') {
       const raw = await kvGet(key);
@@ -37,5 +38,3 @@ module.exports = async (req, res) => {
     res.status(500).json({ error: String(e && e.message || e) });
   }
 };
-
-
