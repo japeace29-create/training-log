@@ -1,11 +1,13 @@
-// Upstash Redis REST API. The Vercel Marketplace integration injects KV_REST_API_*;
-// a database created directly in the Upstash console uses UPSTASH_REDIS_REST_*.
-const KV_URL = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
-const KV_TOKEN = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
+// Общий модуль для работы с Vercel KV (Upstash Redis REST API).
+// Переменные KV_REST_API_URL / KV_REST_API_TOKEN подставляются
+// автоматически, когда в проекте на Vercel подключено хранилище KV.
+
+const KV_URL = process.env.KV_REST_API_URL;
+const KV_TOKEN = process.env.KV_REST_API_TOKEN;
 
 async function kvCommand(command) {
   if (!KV_URL || !KV_TOKEN) {
-    throw new Error('База не подключена: добавьте Upstash Redis в разделе Storage проекта на Vercel');
+    throw new Error('KV не подключено: нет KV_REST_API_URL / KV_REST_API_TOKEN');
   }
   const res = await fetch(KV_URL, {
     method: 'POST',
@@ -27,4 +29,4 @@ async function kvSet(key, value) {
   return kvCommand(['SET', key, value]);
 }
 
-module.exports = { kvCommand, kvGet, kvSet };
+module.exports = { kvGet, kvSet };

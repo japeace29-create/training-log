@@ -1,31 +1,28 @@
 const { kvGet, kvSet } = require('./_lib');
-const { userIdFromRequest } = require('./_auth');
 
-function normalize(d){
-  return {
-    sessions: Array.isArray(d.sessions) ? d.sessions : [],
-    overrides: (d.overrides && typeof d.overrides === 'object') ? d.overrides : {},
-    profile: (d.profile && typeof d.profile === 'object') ? d.profile : null
-  };
-}
+const KEY = 'training-log:data';
 
 module.exports = async (req, res) => {
   try {
-    const userId = userIdFromRequest(req);
-    if (!userId) {
-      res.status(401).json({ error: 'Нужно войти через Telegram' });
-      return;
-    }
-    const key = 'training-log:user:' + userId;
-
     if (req.method === 'GET') {
-      const raw = await kvGet(key);
-      res.status(200).json(normalize(raw ? JSON.parse(raw) : {}));
+      const raw = await kvGet(KEY);
+      const data = raw ? JSON.parse(raw) : { sessions: [], overrides: {}, draft: null };
+      res.status(200).json({
+        sessions: Array.isArray(data.sessions) ? data.sessions : [],
+        overrides: (data.overrides && typeof data.overrides === 'object') ? data.overrides : {},
+        draft: data.draft || null
+      });
       return;
     }
 
     if (req.method === 'POST') {
-      await kvSet(key, JSON.stringify(normalize(req.body || {})));
+      const payload = req.body || {};
+      const data = {
+        sessions: Array.isArray(payload.sessions) ? payload.sessions : [],
+        overrides: (payload.overrides && typeof payload.overrides === 'object') ? payload.overrides : {},
+        draft: payload.draft || null
+      };
+      await kvSet(KEY, JSON.stringify(data));
       res.status(200).json({ ok: true });
       return;
     }
@@ -35,3 +32,4 @@ module.exports = async (req, res) => {
     res.status(500).json({ error: String(e && e.message || e) });
   }
 };
+
