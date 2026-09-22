@@ -23,10 +23,11 @@
     --separator: rgba(84,84,88,0.65);
     --text:#FFFFFF;
     --text-secondary: rgba(235,235,245,0.6);
-    --accent:#E63946;
-    --accent-2:#FF6B5B;
-    --success:#34D399;
-    --success-text:#04160F;
+    --accent:#0A84FF;
+    --accent-2:#409CFF;
+    --success:#30D158;
+    --success-text:#FFFFFF;
+    --danger:#FF453A;
     --radius:14px;
     --font-display:-apple-system, BlinkMacSystemFont, 'SF Pro Rounded', 'Quicksand', sans-serif;
     --font-body:-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Nunito', sans-serif;
@@ -113,7 +114,7 @@
     cursor:pointer;
   }
   .btn-primary{
-    background:linear-gradient(135deg, var(--accent), var(--accent-2));
+    background:var(--accent);
     color:#fff;
   }
   .btn-outline{
@@ -130,6 +131,9 @@
     font-size:13px;
     text-decoration:underline;
     text-underline-offset:3px;
+  }
+  .btn-ghost.destructive{
+    color:var(--danger);
   }
   .row-2{
     display:flex;
@@ -994,7 +998,7 @@ function renderProgress(){
     <p class="section-header">Лучшие результаты</p>
     <div class="card">${rows}</div>
     <div class="settings-link">
-      <button class="btn-ghost" onclick="resetAll()">${resetArmed ? 'Точно удалить всё? Нажми ещё раз' : 'Сбросить все данные'}</button>
+      <button class="btn-ghost destructive" onclick="resetAll()">${resetArmed ? 'Точно удалить всё? Нажми ещё раз' : 'Сбросить все данные'}</button>
     </div>
   `;
 }
@@ -1011,7 +1015,7 @@ function renderLogin(){
           onkeydown="if(event.key==='Enter') submitLoginCode()">
       </div>
       <button class="btn btn-primary" onclick="submitLoginCode()">Войти</button>
-      <p id="loginError" style="color:var(--accent-2); font-size:13px; margin-top:12px;"></p>
+      <p id="loginError" style="color:var(--danger); font-size:13px; margin-top:12px;"></p>
     </div>
   `;
 }
