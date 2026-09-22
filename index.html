@@ -718,6 +718,10 @@ function editToday(){
   const s = todaysSession();
   if (s) startWorkout(s.type, s);
 }
+function resumeWorkout(){
+  view = 'workout';
+  render();
+}
 async function cancelWorkout(){
   activeType = null; draft = null; view = 'today'; render();
   await saveAll();
@@ -829,6 +833,7 @@ function renderTabBar(active){
 
 function renderToday(){
   const done = todaysSession();
+  const inProgress = !done && activeType && draft;
   const type = done ? done.type : nextType();
   const countA = sessions.filter(s => s.type === 'A').length;
   const countB = sessions.filter(s => s.type === 'B').length;
@@ -841,6 +846,15 @@ function renderToday(){
         <p class="hero-type">${TYPE_LABELS[done.type]}</p>
         <p class="exercise-preview">${PROGRAM[done.type].map(e=>e.name).join(' · ')}</p>
         <button class="btn btn-outline" onclick="editToday()">Изменить запись</button>
+      </div>
+    `;
+  } else if (inProgress){
+    heroHtml = `
+      <div class="card accent-edge">
+        <p class="eyebrow">Тренировка в процессе</p>
+        <p class="hero-type">${TYPE_LABELS[activeType]}</p>
+        <p class="exercise-preview">${draft.map(e=>e.name).join(' · ')}</p>
+        <button class="btn btn-primary" onclick="resumeWorkout()">Продолжить тренировку</button>
       </div>
     `;
   } else {
