@@ -543,7 +543,8 @@ const ICONS = {
   play: '<path d="M7 4.5v15l12.5-7.5z"/>',
   chevron: '<path d="M9.5 6l6 6-6 6"/>',
   check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
-  send: '<path d="M21 3.5 3 10.8l6.8 2.4L12.2 20z"/><path d="M9.8 13.2 21 3.5"/>'
+  send: '<path d="M21 3.5 3 10.8l6.8 2.4L12.2 20z"/><path d="M9.8 13.2 21 3.5"/>',
+  stairs: '<path d="M3 19h5v-4.5h5V10h5V5.5h3"/>'
 };
 function icon(name){
   return '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true">' + ICONS[name] + '</svg>';
@@ -580,25 +581,25 @@ const SLOTS = {
       { name: 'Разведение гантелей в наклоне', eq: 'dumbbells', role: 'iso' },
       { name: 'Y-подъёмы лёжа', eq: 'none', role: 'iso' }
     ]},
-    { optional: true, variants: [
+    { stage: 2, variants: [
       { name: 'Разгибание ног в тренажёре', eq: 'gym', role: 'iso', avoid: ['knees'] },
       { name: 'Выпады назад', eq: 'none', role: 'iso', avoid: ['bmi','caution','knees'] },
       { name: 'Ягодичный мост', eq: 'none', role: 'iso' }
     ]},
-    { optional: true, variants: [
+    { stage: 3, variants: [
       { name: 'Разгибание рук на блоке', eq: 'gym', role: 'iso' },
       { name: 'Разгибание руки с гантелью в наклоне', eq: 'dumbbells', role: 'iso' },
       { name: 'Обратные отжимания от стула', eq: 'none', role: 'iso', avoid: ['beginner','bmi','caution','shoulders'] },
       { name: 'Отжимания от опоры узким хватом', eq: 'none', role: 'iso' }
     ]},
-    { optional: true, variants: [
+    { stage: 3, variants: [
       { name: 'Подъём гантелей на бицепс', eq: 'dumbbells', role: 'iso' },
       { name: 'Подъём на бицепс с рюкзаком', eq: 'none', role: 'iso' }
     ]},
     { variants: [
       { name: 'Планка', eq: 'none', role: 'time' }
     ]},
-    { optional: true, variants: [
+    { stage: 2, variants: [
       { name: 'Русские скручивания', eq: 'none', role: 'core', avoid: ['back'] },
       { name: 'Мёртвый жук', eq: 'none', role: 'core' }
     ]}
@@ -617,7 +618,7 @@ const SLOTS = {
       { name: 'Выпады назад', eq: 'none', role: 'main', avoid: ['bmi','caution','knees'] },
       { name: 'Приседания на скамью', eq: 'none', role: 'main' }
     ]},
-    { optional: true, variants: [
+    { stage: 2, variants: [
       { name: 'Сгибание ног в тренажёре', eq: 'gym', role: 'iso' },
       { name: 'Сгибание ног на полотенце', eq: 'none', role: 'iso' }
     ]},
@@ -634,7 +635,7 @@ const SLOTS = {
       { name: 'Жим гантелей лёжа на полу', eq: 'dumbbells', role: 'main' },
       { name: 'Отжимания от опоры', eq: 'none', role: 'main' }
     ]},
-    { optional: true, variants: [
+    { stage: 2, variants: [
       { name: 'Разведение гантелей в стороны', eq: 'dumbbells', role: 'iso', avoid: ['shoulders'] },
       { name: 'Разведение гантелей в наклоне', eq: 'dumbbells', role: 'iso' },
       { name: 'Y-подъёмы лёжа', eq: 'none', role: 'iso' }
@@ -644,7 +645,7 @@ const SLOTS = {
       { name: 'Подъём ног лёжа', eq: 'none', role: 'core', avoid: ['back'] },
       { name: 'Птица-собака', eq: 'none', role: 'core' }
     ]},
-    { optional: true, variants: [
+    { stage: 3, variants: [
       { name: 'Скручивания на блоке', eq: 'gym', role: 'core', avoid: ['back'] },
       { name: 'Скручивания лёжа', eq: 'none', role: 'core', avoid: ['back'] },
       { name: 'Боковая планка', eq: 'none', role: 'time' }
@@ -720,7 +721,7 @@ const QUIZ = [
   ]},
   { id: 'duration', title: 'Сколько времени на одну тренировку?', options: [
     ['short', 'До 45 минут', '5 упражнений'],
-    ['normal', 'Около часа', '8–9 упражнений'],
+    ['normal', 'Около часа', '7 упражнений'],
     ['long', 'Больше часа', '8–9 упражнений, больше подходов в базовых']
   ]},
   { id: 'limits', multi: true, title: 'Есть ли боли или травмы?', subtitle: 'Можно выбрать несколько', options: [
@@ -823,7 +824,7 @@ function startLoad(p, cfg){
   const sex = p.sex === 'male' ? 1 : load.lower ? 0.7 : 0.55;
   const age = p.age < 18 || p.age >= 60 ? 0.8 : p.age >= 50 ? 0.9 : 1;
   const caution = p.medical === 'yes' ? 0.8 : 1;
-  const oneRepMax = bw * load.k * LEVEL_STRENGTH[p.level] * sex * age * caution;
+  const oneRepMax = bw * load.k * LEVEL_STRENGTH[p.level] * sex * age * caution * stageInfo(p).load;
   // Epley: weight for N reps = 1RM / (1 + N/30); +2 reps kept in reserve.
   return roundLoad(oneRepMax / (1 + (cfg.repsMax + 2) / 30), load.eq);
 }
@@ -891,27 +892,62 @@ function profileTags(p){
   if (p.medical === 'yes') tags.add('caution');
   return tags;
 }
-function setsFor(role, tags, p){
-  if (tags.has('caution')) return 2;
+// Новичок входит в режим постепенно: этап считается по числу проведённых
+// тренировок, поэтому перерыв ничего не ломает.
+const STAGES = [
+  { title: 'Втягивание', workouts: 6, load: 0.7, note: 'Меньше упражнений и лёгкие веса: первые недели важнее техника, а не результат.' },
+  { title: 'Набираем объём', workouts: 6, load: 0.85, note: 'Добавились упражнения, вес подрастает. Между подходами отдыхайте 1,5–2 минуты.' },
+  { title: 'Полная программа', workouts: Infinity, load: 1, note: 'Полный объём — дальше растёт только вес.' }
+];
+const DURATION_STAGE = { short: 1, normal: 2, long: 3 };
+
+function stageInfo(p, doneCount){
+  const done = doneCount == null ? sessions.length : doneCount;
+  const limit = DURATION_STAGE[p.duration] || 3;
+  let index = STAGES.length - 1;
+  let left = 0;
+  if (p.level === 'beginner'){
+    let rest = done;
+    index = 0;
+    while (index < STAGES.length - 1 && rest >= STAGES[index].workouts){
+      rest -= STAGES[index].workouts;
+      index++;
+    }
+    left = STAGES[index].workouts - rest;
+  }
+  return {
+    index,
+    ramping: p.level === 'beginner' && index < STAGES.length - 1,
+    done: index < STAGES.length - 1 ? STAGES[index].workouts - left : 0,
+    total: STAGES[index].workouts,
+    title: STAGES[index].title,
+    note: STAGES[index].note,
+    load: STAGES[index].load,
+    slots: Math.min(index + 1, limit)
+  };
+}
+function setsFor(role, tags, p, stage){
+  if (tags.has('caution') || stage.index === 0) return 2;
   if (role === 'main') return (p.level === 'advanced' || p.duration === 'long') && !tags.has('beginner') ? 4 : 3;
   return tags.has('beginner') || p.goal === 'health' ? 2 : 3;
 }
-function buildProgram(p){
+function buildProgram(p, doneCount){
   const tags = profileTags(p);
   const rank = EQ_RANK[p.place];
   const reps = REPS[tags.has('caution') ? 'health' : p.goal];
+  const stage = stageInfo(p, doneCount);
   const result = {};
   ['A', 'B'].forEach(type => {
     const used = new Set();
     result[type] = SLOTS[type]
-      .filter(slot => !(slot.optional && p.duration === 'short'))
+      .filter(slot => (slot.stage || 1) <= stage.slots)
       .map(slot => {
         const fits = slot.variants.filter(v => EQ_RANK[v.eq] <= rank && !used.has(v.name));
         const v = fits.find(v => !(v.avoid || []).some(t => tags.has(t))) || fits[fits.length - 1];
         used.add(v.name);
         let [repsMin, repsMax] = reps[v.role];
         if (v.role === 'main' && repsMin < 8 && (tags.has('senior') || tags.has('young'))) [repsMin, repsMax] = [8, 10];
-        return { name: v.name, sets: setsFor(v.role, tags, p), repsMin, repsMax, isTime: v.role === 'time' };
+        return { name: v.name, sets: setsFor(v.role, tags, p, stage), repsMin, repsMax, isTime: v.role === 'time' };
       });
   });
   return result;
@@ -921,7 +957,8 @@ function planNotes(p){
   const notes = [];
   if (tags.has('caution')) notes.push('Перед началом тренировок обязательно проконсультируйтесь с врачом. Программа подобрана щадящая: меньше подходов и умеренная нагрузка.');
   if (p.limits.length) notes.push('Упражнения с нагрузкой на ' + p.limits.map(l => LIMITS_ACC[l]).join(', ') + ' заменены на более щадящие. Если во время упражнения появляется боль — остановитесь.');
-  if (tags.has('beginner')) notes.push('Первые 2 недели работайте с лёгким весом и отрабатывайте технику — у каждого упражнения есть кнопка «Видео».');
+  if (tags.has('beginner')) notes.push('Программа растёт постепенно: первые 6 тренировок — 5 упражнений по 2 подхода с лёгким весом, дальше добавляются упражнения и подходы. Ничего доделывать не нужно, приложение расширит программу само.');
+  if (tags.has('beginner')) notes.push('Первые недели работайте с лёгким весом и отрабатывайте технику — у каждого упражнения есть кнопка «Видео». Если после тренировки тяжело, оставайтесь на том же весе.');
   if (tags.has('senior')) notes.push('Перед каждой тренировкой — разминка 5–10 минут. Увеличивайте нагрузку плавно.');
   if (tags.has('young')) notes.push('До 18 лет технику лучше осваивать под присмотром тренера.');
   if (p.goal === 'loss' && bmiOf(p) < 18.5) notes.push('Ваш ИМТ ниже нормы — худеть не стоит. Возможно, вам больше подойдёт цель «Набрать мышечную массу».');
@@ -1200,6 +1237,7 @@ async function finishWorkout(){
   sessions.push(entry);
   sessions.sort((a,b) => a.date.localeCompare(b.date));
   activeType = null; draft = null; view = 'today';
+  if (profile) program = buildProgram(profile);
   await saveAll();
   render();
 }
@@ -1223,6 +1261,7 @@ async function resetAll(){
     return;
   }
   sessions = [];
+  if (profile) program = buildProgram(profile);
   await saveAll();
   resetArmed = false;
   view = 'today';
@@ -1291,6 +1330,19 @@ function renderTabBar(active){
   `;
 }
 
+function plural(n, forms){
+  const a = Math.abs(n) % 100;
+  const b = a % 10;
+  if (a > 10 && a < 20) return forms[2];
+  if (b > 1 && b < 5) return forms[1];
+  return b === 1 ? forms[0] : forms[2];
+}
+function workoutSummary(list){
+  const setsTotal = list.reduce((sum, ex) => sum + ex.sets, 0);
+  const minutes = Math.round((setsTotal * 2.5 + 8) / 5) * 5;
+  return list.length + ' ' + plural(list.length, ['упражнение', 'упражнения', 'упражнений']) + ' · примерно ' + minutes + ' минут';
+}
+
 function renderToday(){
   const done = todaysSession();
   const type = done ? done.type : nextType();
@@ -1321,6 +1373,7 @@ function renderToday(){
       <div class="card">
         <p class="eyebrow">Следующая тренировка</p>
         <p class="hero-type">${TYPE_LABELS[type]}</p>
+        <p class="quiz-sub" style="margin:2px 0 0;">${workoutSummary(program[type])}</p>
         <p class="exercise-preview">${program[type].map(e=>e.name).join(' · ')}</p>
         <button class="btn btn-primary" onclick="startWorkout('${type}')">Начать тренировку</button>
       </div>
@@ -1329,6 +1382,15 @@ function renderToday(){
 
   const now = new Date();
   const strip = monthGridHtml(monthGrid(now.getFullYear(), now.getMonth()));
+  const stage = profile ? stageInfo(profile) : null;
+  const stageCard = stage && stage.ramping ? `
+    <p class="section-title" style="margin-top:4px;">Этап ${stage.index + 1} из ${STAGES.length} · ${stage.title}</p>
+    <div class="card">
+      <div class="quiz-bar"><span style="width:${Math.round(stage.done / stage.total * 100)}%"></span></div>
+      <p class="quiz-sub" style="margin:0;">${stage.note}</p>
+      <p class="quiz-sub" style="margin:8px 0 0;">До следующего этапа — ${stage.total - stage.done} ${plural(stage.total - stage.done, ['тренировка', 'тренировки', 'тренировок'])}.</p>
+    </div>
+  ` : '';
   const quizCard = profile ? '' : `
     <div class="card">
       <p class="eyebrow">Первоначальный тест</p>
@@ -1350,6 +1412,7 @@ function renderToday(){
       </div>
     </div>
     ${heroHtml}
+    ${stageCard}
   `;
 }
 
@@ -1486,6 +1549,7 @@ function renderSettings(){
       ${row('star', '#6D7CFF', 'Опыт', optionLabel('level', profile.level))}
       ${row('pin', '#00D2E0', 'Где', optionLabel('place', profile.place))}
       ${row('clock', '#DB34F2', 'Время', optionLabel('duration', profile.duration))}
+      ${row('stairs', '#FF9230', 'Этап', 'Этап ' + (stageInfo(profile).index + 1) + ' из ' + STAGES.length + ' · ' + stageInfo(profile).title)}
       ${row('aid', '#FF4245', 'Боли и травмы', profile.limits.length ? profile.limits.map(l => optionLabel('limits', l)).join(', ') : 'нет')}
     </div>
     <div class="card list">
