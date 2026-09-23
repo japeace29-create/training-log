@@ -1,6 +1,15 @@
 const { kvGet, kvSet } = require('./_lib');
 const { userIdFromRequest } = require('./_auth');
 
+function normalize(d){
+  return {
+    sessions: Array.isArray(d.sessions) ? d.sessions : [],
+    overrides: (d.overrides && typeof d.overrides === 'object') ? d.overrides : {},
+    profile: (d.profile && typeof d.profile === 'object') ? d.profile : null,
+    draft: d.draft || null
+  };
+}
+
 module.exports = async (req, res) => {
   try {
     const userId = userIdFromRequest(req);
@@ -12,23 +21,12 @@ module.exports = async (req, res) => {
 
     if (req.method === 'GET') {
       const raw = await kvGet(key);
-      const data = raw ? JSON.parse(raw) : { sessions: [], overrides: {}, draft: null };
-      res.status(200).json({
-        sessions: Array.isArray(data.sessions) ? data.sessions : [],
-        overrides: (data.overrides && typeof data.overrides === 'object') ? data.overrides : {},
-        draft: data.draft || null
-      });
+      res.status(200).json(normalize(raw ? JSON.parse(raw) : {}));
       return;
     }
 
     if (req.method === 'POST') {
-      const payload = req.body || {};
-      const data = {
-        sessions: Array.isArray(payload.sessions) ? payload.sessions : [],
-        overrides: (payload.overrides && typeof payload.overrides === 'object') ? payload.overrides : {},
-        draft: payload.draft || null
-      };
-      await kvSet(key, JSON.stringify(data));
+      await kvSet(key, JSON.stringify(normalize(req.body || {})));
       res.status(200).json({ ok: true });
       return;
     }

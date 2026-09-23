@@ -11,85 +11,222 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Дневник">
 <link rel="apple-touch-icon" href="icon.svg">
-<script src="https://telegram.org/js/telegram-web-app.js"></script>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&family=Quicksand:wght@600;700&display=swap" rel="stylesheet">
 <style>
   :root{
     --bg:#000000;
-    --group:#1C1C1E;
-    --group-2:#2C2C2E;
-    --separator: rgba(84,84,88,0.65);
+    --surface:#1C1C1E;
+    --surface-2:#2C2C2E;
+    --surface-3:#3A3A3C;
+    --separator:#38383A;
     --text:#FFFFFF;
-    --text-secondary: rgba(235,235,245,0.6);
-    --accent:#0A84FF;
-    --accent-2:#409CFF;
-    --success:#30D158;
-    --success-text:#FFFFFF;
-    --danger:#FF453A;
-    --radius:14px;
-    --font-display:-apple-system, BlinkMacSystemFont, 'SF Pro Rounded', 'Quicksand', sans-serif;
-    --font-body:-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Nunito', sans-serif;
+    --text-muted:#98989F;
+    --text-faint:#5B5B60;
+    --accent:#0091FF;
+    --green:#30D158;
+    --green-tint:#1F3526;
+    --red:#FF4245;
+    --orange:#FF9230;
+    --radius-l:26px;
+    --radius-s:10px;
+    --font:-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    --font-display:-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   }
   *{box-sizing:border-box;}
   html,body{margin:0;padding:0;}
   body{
     background:var(--bg);
     color:var(--text);
-    font-family:var(--font-body);
-    line-height:1.4;
+    font-family:var(--font);
+    font-size:15px;
+    line-height:1.35;
     -webkit-font-smoothing:antialiased;
     min-height:100vh;
+    overflow-x:hidden;
   }
+  button{font-family:inherit;}
   .wrap{
     max-width:480px;
     margin:0 auto;
-    padding:8px 0 40px;
+    padding:calc(env(safe-area-inset-top) + 14px) 16px calc(env(safe-area-inset-bottom) + 32px);
   }
-  header{
-    padding:8px 20px 20px;
-  }
+  header{margin:6px 4px 14px;}
   h1{
     font-family:var(--font-display);
+    font-size:30px;
     font-weight:700;
-    font-size:28px;
+    letter-spacing:0.2px;
     margin:0;
-    color:var(--text);
   }
   header .date{
-    display:block;
-    font-size:14px;
-    color:var(--text-secondary);
+    font-size:15px;
+    color:var(--text-muted);
     margin-top:2px;
-    text-transform:capitalize;
   }
-  .section-header{
-    margin:28px 20px 8px;
-    font-size:13px;
-    font-weight:500;
-    color:var(--text-secondary);
-    text-transform:uppercase;
-    letter-spacing:0.4px;
+  .ico{
+    width:22px;
+    height:22px;
+    flex:0 0 auto;
+    fill:none;
+    stroke:currentColor;
+    stroke-width:2;
+    stroke-linecap:round;
+    stroke-linejoin:round;
   }
-  .wrap > .section-header:first-child,
-  header + .section-header{
-    margin-top:6px;
-  }
+
+  /* Grouped sections */
   .card{
-    background:var(--group);
-    border-radius:var(--radius);
-    margin:0 16px 24px;
+    background:var(--surface);
+    border-radius:var(--radius-l);
+    padding:16px 18px;
+    margin-bottom:14px;
     overflow:hidden;
   }
-  .card.hero{
-    padding:20px;
+  .card.list{padding:0;}
+  .list > :not(.row){
+    margin-left:18px;
+    padding-right:18px;
+    border-bottom:0.5px solid var(--separator);
+  }
+  .list > :not(.row):last-child{border-bottom:none;}
+  .section-title{
+    font-size:13px;
+    color:var(--text-muted);
+    margin:22px 18px 7px;
+  }
+  .lib-note{
+    font-size:13px;
+    color:var(--text-muted);
+    margin:-6px 18px 18px;
   }
   .eyebrow{
-    font-size:12px;
-    color:var(--text-secondary);
+    font-size:13px;
+    color:var(--text-muted);
     margin:0 0 4px;
   }
+
+  /* Rows (iOS table cells) */
+  .row{
+    display:flex;
+    align-items:center;
+    gap:12px;
+    width:100%;
+    padding:0 0 0 18px;
+    background:none;
+    border:none;
+    color:var(--text);
+    font:inherit;
+    text-align:left;
+  }
+  button.row{cursor:pointer;}
+  button.row:active{background:var(--surface-3);}
+  .row-body{
+    flex:1;
+    min-width:0;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+    min-height:50px;
+    padding:11px 18px 11px 0;
+    border-bottom:0.5px solid var(--separator);
+  }
+  .row:last-child .row-body{border-bottom:none;}
+  .row-body > .ico{width:15px; height:15px; color:var(--text-faint); stroke-width:2.6;}
+  .row-label{font-size:16px;}
+  .row-label.accent{color:var(--accent);}
+  .row-value{
+    font-size:16px;
+    color:var(--text-muted);
+    text-align:right;
+  }
+  .row-text{display:flex; flex-direction:column; gap:2px;}
+  .row-sub{font-size:13px; color:var(--text-muted);}
+  .row input{
+    flex:1;
+    min-width:0;
+    background:none;
+    border:none;
+    color:var(--text);
+    font:inherit;
+    font-size:16px;
+    text-align:right;
+    font-variant-numeric:tabular-nums;
+    padding:0;
+  }
+  .row input:focus{outline:none;}
+  .row input::placeholder{color:var(--text-faint);}
+  .row-unit{font-size:16px; color:var(--text-muted); width:26px;}
+  .icon-sq{
+    flex:0 0 auto;
+    width:30px;
+    height:30px;
+    border-radius:8px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    color:#fff;
+  }
+  .icon-sq .ico{width:18px; height:18px;}
+  .check{display:flex; color:var(--accent);}
+  .check .ico{width:20px; height:20px; stroke-width:2.6;}
+
+  /* Buttons */
+  .btn{
+    display:inline-block;
+    width:100%;
+    text-align:center;
+    padding:14px 18px;
+    border-radius:999px;
+    font-size:17px;
+    font-weight:600;
+    border:none;
+    cursor:pointer;
+  }
+  .btn:active{filter:brightness(0.85);}
+  .btn-primary{background:var(--accent); color:#fff;}
+  .btn-outline{background:var(--surface-2); color:var(--text);}
+  .btn-ghost{
+    background:none;
+    border:none;
+    padding:8px 0;
+    width:auto;
+    font-size:15px;
+    color:var(--accent);
+    cursor:pointer;
+  }
+  .row-2{display:flex; gap:10px;}
+  .row-2 .btn{flex:1;}
+  .settings-link{text-align:center; margin-top:18px;}
+  .settings-link .btn-ghost{color:var(--red);}
+
+  /* Tab bar */
+  .tabbar{
+    display:flex;
+    align-items:center;
+    gap:2px;
+    margin-bottom:16px;
+    padding:4px;
+    background:var(--surface-2);
+    border-radius:999px;
+  }
+  .tabbar button{
+    flex:1;
+    background:none;
+    border:none;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:2px;
+    color:var(--text-muted);
+    font-size:10px;
+    font-weight:600;
+    padding:7px 2px 6px;
+    border-radius:999px;
+    cursor:pointer;
+  }
+  .tabbar button.active{color:var(--accent); background:#161618;}
+
+  /* Today */
   .hero-type{
     font-family:var(--font-display);
     font-size:28px;
@@ -97,115 +234,48 @@
     margin:0 0 6px;
   }
   .exercise-preview{
-    font-size:13px;
-    color:var(--text-secondary);
-    margin:10px 0 16px;
+    font-size:14px;
+    color:var(--text-muted);
+    margin:8px 0 16px;
   }
-  .btn{
-    display:inline-block;
-    width:100%;
-    text-align:center;
-    padding:14px 16px;
-    border-radius:12px;
-    font-family:var(--font-body);
-    font-weight:700;
-    font-size:15px;
-    border:1px solid transparent;
-    cursor:pointer;
-  }
-  .btn-primary{
-    background:var(--accent);
-    color:#fff;
-  }
-  .btn-outline{
-    background:var(--group-2);
-    color:var(--text);
-    border-color:var(--separator);
-  }
-  .btn-ghost{
-    background:transparent;
-    color:var(--text-secondary);
-    border:none;
-    padding:8px 0;
-    width:auto;
-    font-size:13px;
-    text-decoration:underline;
-    text-underline-offset:3px;
-  }
-  .btn-ghost.destructive{
-    color:var(--danger);
-  }
-  .row-2{
-    display:flex;
-    gap:10px;
-    margin:0 16px 24px;
-  }
-  .row-2 .btn{flex:1;}
-  .stats{
-    display:flex;
-    gap:14px;
-    padding:16px;
-    border-top:1px solid var(--separator);
-  }
+  .stats{display:flex; gap:14px; margin-top:16px;}
   .stat{flex:1;}
   .stat .num{
     font-family:var(--font-display);
-    font-size:22px;
+    font-size:24px;
     font-weight:700;
     font-variant-numeric:tabular-nums;
   }
-  .stat .lbl{
-    font-size:12px;
-    color:var(--text-secondary);
-  }
-  .strip{
-    display:flex;
-    gap:5px;
-    flex-wrap:wrap;
-    padding:14px 16px;
-  }
+  .stat .lbl{font-size:12px; color:var(--text-muted);}
+  .strip{display:flex; gap:6px; margin-top:12px; flex-wrap:wrap;}
   .day-sq{
-    width:26px;
-    height:26px;
-    border-radius:7px;
-    background:var(--group-2);
-    border:1px solid var(--separator);
+    width:28px;
+    height:28px;
+    border-radius:50%;
+    background:var(--surface-2);
     display:flex;
     align-items:center;
     justify-content:center;
-    font-size:10px;
-    font-weight:700;
-    color:var(--text-secondary);
+    font-size:11px;
+    font-weight:600;
+    color:var(--text-muted);
+    font-variant-numeric:tabular-nums;
   }
-  .day-sq.done{
-    background:var(--success);
-    color:var(--success-text);
-    border-color:var(--success);
-  }
-  .day-sq.today{
-    box-shadow:0 0 0 2px var(--accent);
-  }
-  .exercise{
-    padding:16px;
-    border-bottom:1px solid var(--separator);
-  }
-  .exercise:last-child{border-bottom:none;}
+  .day-sq.done{background:var(--green); color:#00210B;}
+  .day-sq.today{box-shadow:0 0 0 2px var(--accent); color:var(--text);}
+
+  /* Workout */
+  .exercise{margin-bottom:22px;}
+  .exercise:last-child{margin-bottom:0;}
   .exercise h3{
     font-family:var(--font-display);
-    font-size:16px;
-    font-weight:700;
+    font-size:17px;
+    font-weight:600;
     margin:0 0 2px;
   }
-  .exercise .target{
-    font-size:12px;
-    color:var(--text-secondary);
-    margin:0 0 4px;
-  }
-  .exercise .last-time{
-    font-size:12px;
-    color:var(--text-secondary);
-    margin:0 0 10px;
-  }
+  .exercise .target,
+  .lib-row .target{font-size:13px; color:var(--text-muted); margin:0 0 3px;}
+  .exercise .last-time{font-size:13px; color:var(--text-muted); margin:0 0 10px;}
   .ex-head{
     display:flex;
     justify-content:space-between;
@@ -216,226 +286,216 @@
     flex:0 0 auto;
     display:inline-flex;
     align-items:center;
-    gap:5px;
-    font-family:var(--font-body);
-    font-size:12px;
-    font-weight:700;
-    color:var(--text);
-    background:var(--group-2);
-    border:1px solid var(--separator);
-    border-radius:12px;
-    padding:7px 10px;
+    gap:4px;
+    font-size:13px;
+    font-weight:600;
+    color:var(--accent);
+    background:var(--surface-2);
+    border-radius:999px;
+    padding:6px 11px;
     text-decoration:none;
     white-space:nowrap;
   }
-  .video-btn:hover,
-  .video-btn:focus-visible{
-    border-color:var(--accent);
-    color:var(--accent-2);
+  .video-btn .ico{width:11px; height:11px; fill:currentColor; stroke:none;}
+  .exercise .advice{
+    font-size:13px;
+    color:var(--text-muted);
+    margin:-2px 0 10px;
+    padding:9px 12px;
+    border-radius:12px;
+    background:var(--green-tint);
   }
+  .exercise .advice b{color:var(--green); font-size:15px; font-weight:600; white-space:nowrap;}
+  .set-row{display:flex; align-items:center; gap:8px; margin-bottom:8px;}
+  .set-row .set-label{
+    width:18px;
+    font-size:13px;
+    color:var(--text-muted);
+    font-variant-numeric:tabular-nums;
+  }
+  .set-row input,
+  .cfg-inputs input{
+    width:100%;
+    background:var(--surface-2);
+    border:none;
+    color:var(--text);
+    border-radius:var(--radius-s);
+    padding:9px 10px;
+    font:inherit;
+    font-size:16px;
+    font-variant-numeric:tabular-nums;
+  }
+  .set-row input::placeholder{color:var(--text-faint);}
+  .set-row input:focus-visible,
+  .cfg-inputs input:focus-visible{outline:2px solid var(--accent); outline-offset:0;}
+  .set-row .unit{font-size:13px; color:var(--text-muted); width:20px;}
+  .set-row .done-toggle{
+    flex:0 0 auto;
+    width:30px;
+    height:30px;
+    border-radius:50%;
+    border:1.5px solid #48484A;
+    background:none;
+    color:#fff;
+    cursor:pointer;
+    font-size:15px;
+    font-weight:700;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+  }
+  .set-row .done-toggle.on{background:var(--green); border-color:var(--green);}
+
+  /* Lists: exercises, settings, history, progress, plan */
   .lib-row{
     display:flex;
     justify-content:space-between;
     align-items:center;
     gap:10px;
-    padding:14px 16px;
-    border-bottom:1px solid var(--separator);
+    padding:12px 0;
   }
-  .lib-row:last-child{border-bottom:none;}
-  .lib-name{
-    font-size:15px;
-    font-weight:500;
-    margin-bottom:2px;
-  }
-  .lib-note{
-    font-size:12px;
-    color:var(--text-secondary);
-    margin:-4px 16px 16px;
-  }
-  .cfg-row{
-    padding:14px 16px;
-    border-bottom:1px solid var(--separator);
-  }
-  .cfg-row:last-child{border-bottom:none;}
-  .cfg-name{
-    font-size:15px;
-    font-weight:500;
-    margin-bottom:10px;
-  }
-  .cfg-inputs{
-    display:flex;
-    gap:10px;
-  }
+  .lib-name{font-size:16px; margin-bottom:2px;}
+  .lib-advice{font-size:13px; color:var(--green); margin-top:2px;}
+  .cfg-row{padding:12px 0 14px;}
+  .cfg-name{font-size:16px; margin-bottom:10px;}
+  .cfg-inputs{display:flex; gap:10px;}
   .cfg-inputs label{
     flex:1;
-    font-size:11px;
-    color:var(--text-secondary);
+    font-size:12px;
+    color:var(--text-muted);
     display:flex;
     flex-direction:column;
-    gap:4px;
-  }
-  .cfg-inputs input{
-    background:var(--group-2);
-    border:1px solid var(--separator);
-    color:var(--text);
-    border-radius:10px;
-    padding:8px;
-    font-family:var(--font-body);
-    font-size:14px;
-    font-variant-numeric:tabular-nums;
-    width:100%;
-  }
-  .cfg-inputs input:focus-visible{
-    outline:2px solid var(--accent);
-    outline-offset:1px;
-  }
-  .set-row{
-    display:flex;
-    align-items:center;
-    gap:8px;
-    margin-bottom:7px;
-  }
-  .set-row .set-label{
-    width:20px;
-    font-size:12px;
-    color:var(--text-secondary);
-    font-variant-numeric:tabular-nums;
-  }
-  .set-row input{
-    background:var(--group-2);
-    border:1px solid var(--separator);
-    color:var(--text);
-    border-radius:10px;
-    padding:9px 8px;
-    font-family:var(--font-body);
-    font-size:14px;
-    font-variant-numeric:tabular-nums;
-    width:100%;
-  }
-  .set-row input::placeholder{color:rgba(255,255,255,0.35);}
-  .set-row input:focus-visible{
-    outline:2px solid var(--accent);
-    outline-offset:1px;
-  }
-  .set-row .unit{
-    font-size:12px;
-    color:var(--text-secondary);
-    width:22px;
-  }
-  .set-row .done-toggle{
-    flex:0 0 auto;
-    width:32px;
-    height:32px;
-    border-radius:50%;
-    border:1px solid var(--separator);
-    background:var(--group-2);
-    color:var(--text-secondary);
-    cursor:pointer;
-    font-size:15px;
-    display:flex;
-    align-items:center;
-    justify-content:center;
-  }
-  .set-row .done-toggle.on{
-    background:var(--success);
-    border-color:var(--success);
-    color:var(--success-text);
+    gap:5px;
   }
   .hist-item summary{
-    padding:14px 16px;
+    padding:13px 0;
     cursor:pointer;
     display:flex;
     justify-content:space-between;
     align-items:center;
-    font-size:14px;
+    font-size:16px;
     list-style:none;
-    border-bottom:1px solid var(--separator);
   }
-  .hist-item:last-child summary{border-bottom:none;}
-  .hist-item[open] summary{border-bottom:1px solid var(--separator);}
   .hist-item summary::-webkit-details-marker{display:none;}
-  .hist-item summary .type-badge{
-    font-family:var(--font-display);
-    font-size:13px;
-    font-weight:700;
-    color:var(--accent-2);
-  }
-  .hist-item .hist-body{
-    padding:4px 16px 14px;
-    border-bottom:1px solid var(--separator);
-  }
-  .hist-item:last-child .hist-body{border-bottom:none;}
-  .hist-ex{
-    font-size:13px;
-    padding-top:10px;
-  }
-  .hist-ex b{font-weight:700;}
-  .hist-ex .sets-txt{color:var(--text-secondary);}
+  .hist-item summary .row-value{display:inline-flex; align-items:center; gap:6px;}
+  .hist-item summary .ico{width:14px; height:14px; color:var(--text-faint); stroke-width:2.6; transition:transform .2s;}
+  .hist-item[open] summary .ico{transform:rotate(90deg);}
+  .hist-body{padding:0 0 12px;}
+  .hist-ex{font-size:14px; padding-top:8px;}
+  .hist-ex b{font-weight:600;}
+  .hist-ex .sets-txt{color:var(--text-muted);}
   .progress-row{
     display:flex;
     justify-content:space-between;
-    padding:12px 16px;
-    border-bottom:1px solid var(--separator);
-    font-size:14px;
+    gap:12px;
+    padding:13px 0;
+    font-size:16px;
   }
-  .progress-row:last-child{border-bottom:none;}
-  .progress-row .pname{color:var(--text);}
   .progress-row .pval{
-    color:var(--text-secondary);
+    color:var(--text-muted);
     font-variant-numeric:tabular-nums;
     text-align:right;
   }
+  .progress-row .next-load{display:block; font-size:13px;}
+  .progress-row .next-load.up{color:var(--green);}
+  .progress-row .next-load.down{color:var(--orange);}
+  .plan-row{
+    display:flex;
+    justify-content:space-between;
+    gap:12px;
+    padding:12px 0;
+    font-size:15px;
+  }
+  .plan-row .plan-sets{
+    color:var(--text-muted);
+    white-space:nowrap;
+    font-variant-numeric:tabular-nums;
+  }
+  .plan-row .plan-load{display:block; text-align:right; color:var(--green); font-size:13px;}
   .empty{
-    color:var(--text-secondary);
-    font-size:14px;
+    color:var(--text-muted);
+    font-size:15px;
     text-align:center;
     padding:24px 0;
   }
-  .settings-link{
-    text-align:center;
-    margin:24px 16px 0;
-  }
-  .tabbar{
-    position:relative;
+
+  /* Quiz */
+  .quiz-top{
     display:flex;
-    justify-content:space-around;
+    justify-content:space-between;
     align-items:center;
-    margin:0 16px 8px;
-    padding:8px 4px;
-    background:rgba(28,28,30,0.85);
-    backdrop-filter:blur(30px) saturate(180%);
-    -webkit-backdrop-filter:blur(30px) saturate(180%);
-    border:1px solid var(--separator);
-    border-radius:var(--radius);
+    margin:0 4px;
   }
-  .tabbar button{
+  .quiz-step{font-size:13px; color:var(--text-muted);}
+  .quiz-bar{
+    height:4px;
+    border-radius:2px;
+    background:var(--surface-3);
+    margin:6px 4px 20px;
+    overflow:hidden;
+  }
+  .quiz-bar span{display:block; height:100%; border-radius:2px; background:var(--accent);}
+  .quiz-title{
+    font-family:var(--font-display);
+    font-size:24px;
+    font-weight:700;
+    margin:0 4px 6px;
+  }
+  .quiz-sub{font-size:14px; color:var(--text-muted); margin:0 4px 16px;}
+  .card .quiz-title,
+  .card .quiz-sub{margin-left:0; margin-right:0;}
+  .segmented{
+    display:flex;
+    background:var(--surface);
+    border-radius:999px;
+    padding:3px;
+    margin-bottom:14px;
+  }
+  .segmented button{
+    flex:1;
     background:none;
     border:none;
-    display:flex;
-    flex-direction:column;
-    align-items:center;
-    gap:2px;
-    color:var(--text-secondary);
-    font-family:var(--font-body);
-    font-size:10px;
-    font-weight:700;
-    padding:7px 6px;
-    border-radius:10px;
-    cursor:pointer;
-    flex:1;
-  }
-  .tabbar button .icon{font-size:18px; line-height:1;}
-  .tabbar button.active{
     color:var(--text);
-    background:var(--group-2);
+    font-size:15px;
+    font-weight:600;
+    padding:9px;
+    border-radius:999px;
+    cursor:pointer;
   }
+  .segmented button.on{background:var(--surface-3);}
+  .quiz-error{color:var(--red); font-size:14px; margin:-4px 4px 14px;}
+  .banner{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    gap:12px;
+    background:#3A2A12;
+    color:#FFD8A8;
+    border-radius:var(--radius-s);
+    padding:10px 14px;
+    margin-bottom:14px;
+    font-size:14px;
+  }
+  .banner button{
+    background:none;
+    border:none;
+    color:var(--orange);
+    font-size:14px;
+    font-weight:600;
+    cursor:pointer;
+    padding:0;
+  }
+  .notes{margin:12px 0 0; padding-left:18px; font-size:14px;}
+  .notes li{margin-bottom:6px;}
+  .notes li:last-child{margin-bottom:0;}
+  .notes li::marker{color:var(--text-muted);}
 </style>
 </head>
 <body>
 <div class="wrap" id="app"></div>
 
 <script>
-const PROGRAM = {
+const DEFAULT_PROGRAM = {
   A: [
     { name: 'Приседания со штангой', sets: 3, repsMin: 8, repsMax: 10 },
     { name: 'Жим штанги лёжа', sets: 3, repsMin: 8, repsMax: 10 },
@@ -460,16 +520,243 @@ const PROGRAM = {
 };
 const TYPE_LABELS = { A: 'Тренировка A', B: 'Тренировка B' };
 const TABS = [
-  { id: 'today', label: 'Сегодня', icon: '🏠' },
-  { id: 'exercises', label: 'Упражнения', icon: '🏋️' },
-  { id: 'settings', label: 'Настройки', icon: '⚙️' },
-  { id: 'history', label: 'История', icon: '🕓' },
-  { id: 'progress', label: 'Прогресс', icon: '📈' }
+  { id: 'today', label: 'Сегодня', icon: 'home' },
+  { id: 'exercises', label: 'Упражнения', icon: 'dumbbell' },
+  { id: 'settings', label: 'Настройки', icon: 'gear' },
+  { id: 'history', label: 'История', icon: 'clock' },
+  { id: 'progress', label: 'Прогресс', icon: 'chart' }
+];
+const ICONS = {
+  home: '<path d="M3 10.5 12 3l9 7.5"/><path d="M5.5 9v11h13V9"/><path d="M10 20v-5.5h4V20"/>',
+  dumbbell: '<path d="M6.5 7v10M17.5 7v10M3.5 9.5v5M20.5 9.5v5M6.5 12h11"/>',
+  gear: '<circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="7"/><path d="M12 2.5V5M12 19v2.5M2.5 12H5M19 12h2.5M5.3 5.3l1.8 1.8M16.9 16.9l1.8 1.8M5.3 18.7l1.8-1.8M16.9 7.1l1.8-1.8"/>',
+  clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/>',
+  chart: '<path d="M4 20h16"/><path d="M7 16v-5M12 16V6M17 16V9"/>',
+  person: '<circle cx="12" cy="8" r="4"/><path d="M4.5 21c.8-4 3.8-6 7.5-6s6.7 2 7.5 6"/>',
+  calendar: '<rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/>',
+  ruler: '<path d="M3.5 16.5 16.5 3.5l4 4-13 13z"/><path d="M8 12l2 2M11 9l2 2M14 6l2 2"/>',
+  heart: '<path d="M12 20s-7.5-4.6-7.5-10.2A4.3 4.3 0 0 1 12 7.1a4.3 4.3 0 0 1 7.5 2.7C19.5 15.4 12 20 12 20z"/>',
+  target: '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="1"/>',
+  star: '<path d="M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1 5.9L12 16.9l-5.2 2.8 1-5.9-4.3-4.1 5.9-.8z"/>',
+  pin: '<path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.3"/>',
+  aid: '<rect x="3.5" y="6.5" width="17" height="13" rx="2.5"/><path d="M9 6.5V4h6v2.5M12 10v6M9 13h6"/>',
+  play: '<path d="M7 4.5v15l12.5-7.5z"/>',
+  chevron: '<path d="M9.5 6l6 6-6 6"/>',
+  check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
+  send: '<path d="M21 3.5 3 10.8l6.8 2.4L12.2 20z"/><path d="M9.8 13.2 21 3.5"/>'
+};
+function icon(name){
+  return '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true">' + ICONS[name] + '</svg>';
+}
+
+// Each slot lists variants from preferred to gentlest; the first one that fits
+// the equipment and has no conflicting tag wins. First variants = DEFAULT_PROGRAM.
+const EQ_RANK = { none: 0, dumbbells: 1, gym: 2 };
+const SLOTS = {
+  A: [
+    { variants: [
+      { name: 'Приседания со штангой', eq: 'gym', role: 'main', avoid: ['beginner','senior','caution','knees','back'] },
+      { name: 'Гоблет-присед с гантелью', eq: 'dumbbells', role: 'main', avoid: ['knees'] },
+      { name: 'Жим ногами в тренажёре', eq: 'gym', role: 'main' },
+      { name: 'Приседания на скамью', eq: 'none', role: 'main' }
+    ]},
+    { variants: [
+      { name: 'Жим штанги лёжа', eq: 'gym', role: 'main', avoid: ['shoulders'] },
+      { name: 'Жим гантелей лёжа', eq: 'gym', role: 'main' },
+      { name: 'Жим гантелей лёжа на полу', eq: 'dumbbells', role: 'main' },
+      { name: 'Отжимания', eq: 'none', role: 'main', avoid: ['beginner','bmi','caution','shoulders'] },
+      { name: 'Отжимания от опоры', eq: 'none', role: 'main' }
+    ]},
+    { variants: [
+      { name: 'Тяга штанги в наклоне', eq: 'gym', role: 'main', avoid: ['beginner','caution','back'] },
+      { name: 'Тяга горизонтального блока', eq: 'gym', role: 'main' },
+      { name: 'Тяга гантели в наклоне с опорой', eq: 'dumbbells', role: 'main' },
+      { name: 'Тяга рюкзака в наклоне', eq: 'none', role: 'main' }
+    ]},
+    { variants: [
+      { name: 'Жим гантелей сидя', eq: 'dumbbells', role: 'main', avoid: ['shoulders'] },
+      { name: 'Пайк-отжимания', eq: 'none', role: 'main', avoid: ['beginner','bmi','caution','shoulders'] },
+      { name: 'Тяга к лицу на блоке', eq: 'gym', role: 'iso' },
+      { name: 'Разведение гантелей в наклоне', eq: 'dumbbells', role: 'iso' },
+      { name: 'Y-подъёмы лёжа', eq: 'none', role: 'iso' }
+    ]},
+    { optional: true, variants: [
+      { name: 'Разгибание ног в тренажёре', eq: 'gym', role: 'iso', avoid: ['knees'] },
+      { name: 'Выпады назад', eq: 'none', role: 'iso', avoid: ['bmi','caution','knees'] },
+      { name: 'Ягодичный мост', eq: 'none', role: 'iso' }
+    ]},
+    { optional: true, variants: [
+      { name: 'Разгибание рук на блоке', eq: 'gym', role: 'iso' },
+      { name: 'Разгибание руки с гантелью в наклоне', eq: 'dumbbells', role: 'iso' },
+      { name: 'Обратные отжимания от стула', eq: 'none', role: 'iso', avoid: ['beginner','bmi','caution','shoulders'] },
+      { name: 'Отжимания от опоры узким хватом', eq: 'none', role: 'iso' }
+    ]},
+    { optional: true, variants: [
+      { name: 'Подъём гантелей на бицепс', eq: 'dumbbells', role: 'iso' },
+      { name: 'Подъём на бицепс с рюкзаком', eq: 'none', role: 'iso' }
+    ]},
+    { variants: [
+      { name: 'Планка', eq: 'none', role: 'time' }
+    ]},
+    { optional: true, variants: [
+      { name: 'Русские скручивания', eq: 'none', role: 'core', avoid: ['back'] },
+      { name: 'Мёртвый жук', eq: 'none', role: 'core' }
+    ]}
+  ],
+  B: [
+    { variants: [
+      { name: 'Становая тяга', eq: 'gym', role: 'main', avoid: ['beginner','senior','caution','back'] },
+      { name: 'Румынская тяга с гантелями', eq: 'dumbbells', role: 'main', avoid: ['back'] },
+      { name: 'Ягодичный мост со штангой', eq: 'gym', role: 'main' },
+      { name: 'Ягодичный мост', eq: 'none', role: 'main' }
+    ]},
+    { variants: [
+      { name: 'Жим ногами / выпады', eq: 'gym', role: 'main', avoid: ['knees'] },
+      { name: 'Жим ногами в тренажёре', eq: 'gym', role: 'main' },
+      { name: 'Выпады назад с гантелями', eq: 'dumbbells', role: 'main', avoid: ['bmi','caution','knees'] },
+      { name: 'Выпады назад', eq: 'none', role: 'main', avoid: ['bmi','caution','knees'] },
+      { name: 'Приседания на скамью', eq: 'none', role: 'main' }
+    ]},
+    { optional: true, variants: [
+      { name: 'Сгибание ног в тренажёре', eq: 'gym', role: 'iso' },
+      { name: 'Сгибание ног на полотенце', eq: 'none', role: 'iso' }
+    ]},
+    { variants: [
+      { name: 'Тяга верхнего блока', eq: 'gym', role: 'main' },
+      { name: 'Пуловер с гантелью лёжа', eq: 'dumbbells', role: 'main', avoid: ['shoulders'] },
+      { name: 'Тяга гантели в наклоне с опорой', eq: 'dumbbells', role: 'main' },
+      { name: 'Тяга рюкзака в наклоне', eq: 'none', role: 'main' }
+    ]},
+    { variants: [
+      { name: 'Жим гантелей на наклонной скамье', eq: 'gym', role: 'main', avoid: ['shoulders'] },
+      { name: 'Жим в тренажёре от груди', eq: 'gym', role: 'main' },
+      { name: 'Отжимания', eq: 'none', role: 'main', avoid: ['beginner','bmi','caution','shoulders'] },
+      { name: 'Жим гантелей лёжа на полу', eq: 'dumbbells', role: 'main' },
+      { name: 'Отжимания от опоры', eq: 'none', role: 'main' }
+    ]},
+    { optional: true, variants: [
+      { name: 'Разведение гантелей в стороны', eq: 'dumbbells', role: 'iso', avoid: ['shoulders'] },
+      { name: 'Разведение гантелей в наклоне', eq: 'dumbbells', role: 'iso' },
+      { name: 'Y-подъёмы лёжа', eq: 'none', role: 'iso' }
+    ]},
+    { variants: [
+      { name: 'Подъём ног в висе', eq: 'gym', role: 'core', avoid: ['beginner','bmi','caution','shoulders','back'] },
+      { name: 'Подъём ног лёжа', eq: 'none', role: 'core', avoid: ['back'] },
+      { name: 'Птица-собака', eq: 'none', role: 'core' }
+    ]},
+    { optional: true, variants: [
+      { name: 'Скручивания на блоке', eq: 'gym', role: 'core', avoid: ['back'] },
+      { name: 'Скручивания лёжа', eq: 'none', role: 'core', avoid: ['back'] },
+      { name: 'Боковая планка', eq: 'none', role: 'time' }
+    ]}
+  ]
+};
+const REPS = {
+  mass:     { main: [8, 10],  iso: [12, 15], core: [15, 20], time: [30, 45] },
+  strength: { main: [5, 8],   iso: [8, 12],  core: [12, 15], time: [30, 45] },
+  loss:     { main: [10, 12], iso: [15, 20], core: [15, 20], time: [30, 60] },
+  health:   { main: [10, 12], iso: [12, 15], core: [10, 15], time: [20, 40] }
+};
+const LIMITS_ACC = { knees: 'колени', back: 'спину', shoulders: 'плечи' };
+const SEX_LABELS = { male: 'Мужской', female: 'Женский' };
+// k: estimated one-rep max as a share of body weight for an intermediate man,
+// in the units typed into the set (pair: weight of each of the two dumbbells).
+const LOADS = {
+  'Приседания со штангой': { k: 1.25, eq: 'barbell', lower: true },
+  'Жим штанги лёжа': { k: 0.95, eq: 'barbell' },
+  'Тяга штанги в наклоне': { k: 0.8, eq: 'barbell' },
+  'Становая тяга': { k: 1.5, eq: 'barbell', lower: true },
+  'Ягодичный мост со штангой': { k: 1.5, eq: 'barbell', lower: true },
+  'Гоблет-присед с гантелью': { k: 0.45, eq: 'dumbbell', lower: true },
+  'Жим гантелей лёжа': { k: 0.4, eq: 'dumbbell', pair: true },
+  'Жим гантелей лёжа на полу': { k: 0.38, eq: 'dumbbell', pair: true },
+  'Тяга гантели в наклоне с опорой': { k: 0.45, eq: 'dumbbell' },
+  'Жим гантелей сидя': { k: 0.28, eq: 'dumbbell', pair: true },
+  'Разведение гантелей в наклоне': { k: 0.15, eq: 'dumbbell', pair: true },
+  'Разгибание руки с гантелью в наклоне': { k: 0.15, eq: 'dumbbell' },
+  'Подъём гантелей на бицепс': { k: 0.21, eq: 'dumbbell', pair: true },
+  'Румынская тяга с гантелями': { k: 0.48, eq: 'dumbbell', pair: true, lower: true },
+  'Выпады назад с гантелями': { k: 0.25, eq: 'dumbbell', pair: true, lower: true },
+  'Пуловер с гантелью лёжа': { k: 0.38, eq: 'dumbbell' },
+  'Жим гантелей на наклонной скамье': { k: 0.36, eq: 'dumbbell', pair: true },
+  'Разведение гантелей в стороны': { k: 0.15, eq: 'dumbbell', pair: true },
+  'Жим ногами в тренажёре': { k: 2.2, eq: 'machine', lower: true },
+  'Жим ногами / выпады': { k: 2.2, eq: 'machine', lower: true },
+  'Тяга горизонтального блока': { k: 0.95, eq: 'machine' },
+  'Разгибание ног в тренажёре': { k: 0.85, eq: 'machine', lower: true },
+  'Сгибание ног в тренажёре': { k: 0.7, eq: 'machine', lower: true },
+  'Разгибание рук на блоке': { k: 0.5, eq: 'machine' },
+  'Тяга к лицу на блоке': { k: 0.42, eq: 'machine' },
+  'Тяга верхнего блока': { k: 0.95, eq: 'machine' },
+  'Жим в тренажёре от груди': { k: 1.0, eq: 'machine' },
+  'Скручивания на блоке': { k: 0.7, eq: 'machine' },
+  'Тяга рюкзака в наклоне': { k: 0.25, eq: 'backpack' },
+  'Подъём на бицепс с рюкзаком': { k: 0.16, eq: 'backpack' }
+};
+const EQUIP = {
+  barbell:  { step: 2.5, min: 20, max: Infinity },
+  dumbbell: { step: 1, min: 1, max: Infinity },
+  machine:  { step: 5, min: 5, max: Infinity },
+  backpack: { step: 1, min: 2, max: 15 }
+};
+const LEVEL_STRENGTH = { beginner: 0.6, intermediate: 1, advanced: 1.3 };
+const QUIZ = [
+  { id: 'body' },
+  { id: 'goal', title: 'Какая главная цель?', options: [
+    ['loss', 'Похудеть', 'Снизить вес и процент жира'],
+    ['mass', 'Набрать мышечную массу', 'Увеличить объём мышц'],
+    ['strength', 'Стать сильнее', 'Поднимать больший вес'],
+    ['health', 'Здоровье и тонус', 'Укрепить тело, больше энергии']
+  ]},
+  { id: 'level', title: 'Какой опыт силовых тренировок?', options: [
+    ['beginner', 'Новичок', 'Не занимался(-ась) или перерыв больше полугода'],
+    ['intermediate', 'Есть опыт', '3–12 месяцев регулярных тренировок'],
+    ['advanced', 'Опытный', 'Больше года регулярно']
+  ]},
+  { id: 'place', title: 'Где будете тренироваться?', options: [
+    ['gym', 'В тренажёрном зале', 'Штанга, тренажёры, гантели'],
+    ['dumbbells', 'Дома с гантелями', 'Понадобятся гантели и стул или скамья'],
+    ['none', 'Дома без инвентаря', 'Вес тела и подручные предметы']
+  ]},
+  { id: 'duration', title: 'Сколько времени на одну тренировку?', options: [
+    ['short', 'До 45 минут', '5 упражнений'],
+    ['normal', 'Около часа', '8–9 упражнений'],
+    ['long', 'Больше часа', '8–9 упражнений, больше подходов в базовых']
+  ]},
+  { id: 'limits', multi: true, title: 'Есть ли боли или травмы?', subtitle: 'Можно выбрать несколько', options: [
+    ['knees', 'Колени'],
+    ['back', 'Спина / поясница'],
+    ['shoulders', 'Плечи']
+  ]},
+  { id: 'medical', title: 'Врач ограничивал вам физические нагрузки?', subtitle: 'Например, из-за болезней сердца, давления, недавней операции или беременности', options: [
+    ['yes', 'Да, есть ограничения'],
+    ['no', 'Нет']
+  ]}
 ];
 
 let sessions = [];
 let overrides = {};
+let profile = null;
+let program = DEFAULT_PROGRAM;
+let quiz = null;
 let view = 'loading';
+let session = null;
+try {
+  session = JSON.parse(localStorage.getItem('session') || 'null');
+  // Token saved by the earlier build under a different key — keep people logged in.
+  const legacy = localStorage.getItem('training-log:token');
+  if (!session && legacy){
+    session = { token: legacy, name: '' };
+    localStorage.setItem('session', JSON.stringify(session));
+    localStorage.removeItem('training-log:token');
+  }
+} catch (e) {}
+// Telegram passes signed user data to a Mini App in the URL fragment.
+const TG_INIT_DATA = new URLSearchParams(location.hash.slice(1)).get('tgWebAppData');
+let botName = '';
+let loginError = '';
+let loadError = '';
+let saveFailed = false;
 let activeType = null;
 let draft = null;
 let resetArmed = false;
@@ -493,10 +780,15 @@ function nextType(){
 function todaysSession(){
   return sessions.find(s => s.date === todayStr());
 }
-function lastPerformance(name){
+function filledSets(ex){
+  return ex.sets.filter(s => Number(ex.isTime ? s.value1 : s.value2) > 0);
+}
+function lastPerformance(name, before){
   for (let i = sessions.length - 1; i >= 0; i--){
+    if (before && sessions[i].date >= before) continue;
     const ex = sessions[i].exercises.find(e => e.name === name);
-    if (ex) return { date: sessions[i].date, sets: ex.sets, isTime: ex.isTime };
+    const sets = ex ? filledSets(ex) : [];
+    if (sets.length) return { date: sessions[i].date, sets, isTime: ex.isTime };
   }
   return null;
 }
@@ -504,6 +796,65 @@ function hintText(perf){
   if (!perf) return 'ещё не выполнялось';
   const txt = perf.sets.map(s => perf.isTime ? (s.value1+'сек') : (s.value1+'кг×'+s.value2)).join(', ');
   return 'прошлый раз: ' + txt;
+}
+function kg(w){
+  return String(Math.round(w * 100) / 100).replace('.', ',');
+}
+function loadLabel(name, w, short){
+  const pair = LOADS[name] && LOADS[name].pair;
+  return short ? (pair ? 'по ' : '') + kg(w) + ' кг' : kg(w) + ' кг' + (pair ? ' в каждой руке' : '');
+}
+function roundLoad(w, eq){
+  const e = EQUIP[eq];
+  const step = eq === 'dumbbell' && w > 10 ? 2 : e.step;
+  return Math.min(e.max, Math.max(e.min, Math.round(w / step) * step));
+}
+function loadStep(w, load){
+  if (load.eq === 'barbell') return load.lower ? 5 : 2.5;
+  if (load.eq === 'dumbbell') return w >= 10 ? 2 : 1;
+  return EQUIP[load.eq].step;
+}
+function startLoad(p, cfg){
+  const load = LOADS[cfg.name];
+  if (!load || !p) return null;
+  // Extra body weight above BMI 25 adds little strength, so count only 30% of it.
+  const bw25 = 25 * Math.pow(p.height / 100, 2);
+  const bw = p.weight <= bw25 ? p.weight : bw25 + 0.3 * (p.weight - bw25);
+  const sex = p.sex === 'male' ? 1 : load.lower ? 0.7 : 0.55;
+  const age = p.age < 18 || p.age >= 60 ? 0.8 : p.age >= 50 ? 0.9 : 1;
+  const caution = p.medical === 'yes' ? 0.8 : 1;
+  const oneRepMax = bw * load.k * LEVEL_STRENGTH[p.level] * sex * age * caution;
+  // Epley: weight for N reps = 1RM / (1 + N/30); +2 reps kept in reserve.
+  return roundLoad(oneRepMax / (1 + (cfg.repsMax + 2) / 30), load.eq);
+}
+function weightAdvice(cfg, p, before){
+  const load = LOADS[cfg.name];
+  const perf = lastPerformance(cfg.name, before);
+  if (perf && perf.isTime){
+    const allTop = perf.sets.length >= cfg.sets && perf.sets.every(s => Number(s.value1) >= cfg.repsMax);
+    return allTop ? { weight: null, text: 'все подходы по ' + cfg.repsMax + '+ сек — добавьте 5–10 секунд' } : null;
+  }
+  if (perf){
+    const top = Math.max(...perf.sets.map(s => Number(s.value1) || 0));
+    const reps = perf.sets.map(s => Number(s.value2) || 0);
+    const allTop = perf.sets.length >= cfg.sets && reps.every(r => r >= cfg.repsMax);
+    if (!load) return allTop ? { weight: null, text: 'все подходы на максимум — усложните вариант упражнения или добавьте повторения' } : null;
+    if (top > 0){
+      if (allTop){
+        const next = Math.min(EQUIP[load.eq].max, top + loadStep(top, load));
+        return next > top
+          ? { weight: next, trend: 'up', text: 'прошлый раз ' + kg(top) + ' кг во всех подходах на ' + cfg.repsMax + '+ повторений — добавьте вес' }
+          : { weight: top, text: 'вес на максимуме — добавьте повторения или замедлите темп' };
+      }
+      const lighter = roundLoad(Math.min(top * 0.9, top - loadStep(top, load)), load.eq);
+      if (reps.filter(r => r < cfg.repsMin).length > reps.length / 2 && lighter < top){
+        return { weight: lighter, trend: 'down', text: 'прошлый раз с ' + kg(top) + ' кг не хватило повторений — снизьте вес' };
+      }
+      return { weight: top, text: 'оставьте вес и добейте до ' + cfg.repsMax + ' повторений во всех подходах' };
+    }
+  }
+  const start = startLoad(p, cfg);
+  return start ? { weight: start, text: 'стартовый вес — первый подход сделайте с половиной веса как разминку' } : null;
 }
 function videoSearchUrl(name){
   return 'https://www.youtube.com/results?search_query=' + encodeURIComponent(name + ' техника выполнения');
@@ -523,97 +874,259 @@ function targetText(cfg){
   return cfg.repsMin === cfg.repsMax ? (cfg.repsMin + ' ' + unit) : (cfg.repsMin + '–' + cfg.repsMax + ' ' + unit);
 }
 
-function tgInitData(){
-  try{
-    const wa = window.Telegram && window.Telegram.WebApp;
-    return (wa && wa.initData) ? wa.initData : null;
-  }catch(e){
-    return null;
+function bmiOf(p){
+  return p.weight / Math.pow(p.height / 100, 2);
+}
+function bmiText(p){
+  const b = bmiOf(p);
+  const label = b < 18.5 ? 'ниже нормы' : b < 25 ? 'в норме' : b < 30 ? 'немного выше нормы' : 'выше нормы';
+  return 'ИМТ ' + b.toFixed(1).replace('.', ',') + ' — ' + label;
+}
+function profileTags(p){
+  const tags = new Set(p.limits);
+  if (p.level === 'beginner') tags.add('beginner');
+  if (p.age >= 55) tags.add('senior');
+  if (p.age < 18) tags.add('young');
+  if (bmiOf(p) >= 30) tags.add('bmi');
+  if (p.medical === 'yes') tags.add('caution');
+  return tags;
+}
+function setsFor(role, tags, p){
+  if (tags.has('caution')) return 2;
+  if (role === 'main') return (p.level === 'advanced' || p.duration === 'long') && !tags.has('beginner') ? 4 : 3;
+  return tags.has('beginner') || p.goal === 'health' ? 2 : 3;
+}
+function buildProgram(p){
+  const tags = profileTags(p);
+  const rank = EQ_RANK[p.place];
+  const reps = REPS[tags.has('caution') ? 'health' : p.goal];
+  const result = {};
+  ['A', 'B'].forEach(type => {
+    const used = new Set();
+    result[type] = SLOTS[type]
+      .filter(slot => !(slot.optional && p.duration === 'short'))
+      .map(slot => {
+        const fits = slot.variants.filter(v => EQ_RANK[v.eq] <= rank && !used.has(v.name));
+        const v = fits.find(v => !(v.avoid || []).some(t => tags.has(t))) || fits[fits.length - 1];
+        used.add(v.name);
+        let [repsMin, repsMax] = reps[v.role];
+        if (v.role === 'main' && repsMin < 8 && (tags.has('senior') || tags.has('young'))) [repsMin, repsMax] = [8, 10];
+        return { name: v.name, sets: setsFor(v.role, tags, p), repsMin, repsMax, isTime: v.role === 'time' };
+      });
+  });
+  return result;
+}
+function planNotes(p){
+  const tags = profileTags(p);
+  const notes = [];
+  if (tags.has('caution')) notes.push('Перед началом тренировок обязательно проконсультируйтесь с врачом. Программа подобрана щадящая: меньше подходов и умеренная нагрузка.');
+  if (p.limits.length) notes.push('Упражнения с нагрузкой на ' + p.limits.map(l => LIMITS_ACC[l]).join(', ') + ' заменены на более щадящие. Если во время упражнения появляется боль — остановитесь.');
+  if (tags.has('beginner')) notes.push('Первые 2 недели работайте с лёгким весом и отрабатывайте технику — у каждого упражнения есть кнопка «Видео».');
+  if (tags.has('senior')) notes.push('Перед каждой тренировкой — разминка 5–10 минут. Увеличивайте нагрузку плавно.');
+  if (tags.has('young')) notes.push('До 18 лет технику лучше осваивать под присмотром тренера.');
+  if (p.goal === 'loss' && bmiOf(p) < 18.5) notes.push('Ваш ИМТ ниже нормы — худеть не стоит. Возможно, вам больше подойдёт цель «Набрать мышечную массу».');
+  else if (p.goal === 'loss') notes.push('Для снижения веса главное — питание с небольшим дефицитом калорий. Добавьте 30–40 минут ходьбы в дни без тренировок.');
+  if (p.place === 'none') notes.push('Понадобятся подручные предметы: рюкзак с книгами или бутылками воды, устойчивый стул и полотенце.');
+  notes.push('Веса ниже — стартовый ориентир по вашим данным. Если последние 2 повторения не даются с хорошей техникой — снизьте вес.');
+  notes.push('Дальше вес подсказывается по прошлой тренировке: сделали верхнюю границу повторений во всех подходах — приложение предложит добавить вес, не добрали — оставить или снизить.');
+  notes.push('Чередуйте тренировки A и B, между ними — хотя бы день отдыха.');
+  return notes;
+}
+function optionLabel(stepId, value){
+  const opt = QUIZ.find(s => s.id === stepId).options.find(o => o[0] === value);
+  return opt ? opt[1] : '—';
+}
+
+function startQuiz(){
+  quiz = {
+    step: 0,
+    error: '',
+    returnTo: view,
+    answers: profile ? { ...profile, limits: [...profile.limits] } : { limits: [] }
+  };
+  view = 'quiz';
+  render();
+  window.scrollTo(0, 0);
+}
+function quizExit(){
+  view = quiz.returnTo;
+  quiz = null;
+  render();
+}
+function quizGo(delta){
+  quiz.step += delta;
+  quiz.error = '';
+  render();
+  window.scrollTo(0, 0);
+}
+function quizBody(field, value){
+  quiz.answers[field] = value === '' ? undefined : Number(value);
+}
+function quizSex(value){
+  quiz.answers.sex = value;
+  quiz.error = '';
+  render();
+}
+function quizChoose(i){
+  const step = QUIZ[quiz.step];
+  if (!step.multi){
+    quiz.answers[step.id] = step.options[i][0];
+    quizGo(1);
+    return;
   }
+  const value = step.options[i] ? step.options[i][0] : null;
+  const list = quiz.answers.limits;
+  if (value === null) list.length = 0;
+  else if (list.includes(value)) list.splice(list.indexOf(value), 1);
+  else list.push(value);
+  render();
 }
-function getToken(){
-  return localStorage.getItem('training-log:token');
-}
-function authHeader(){
-  const token = getToken();
-  return token ? { 'Authorization': 'Bearer ' + token } : {};
-}
-async function exchangeForToken(payload){
-  try{
-    const res = await fetch('/api/auth', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-    const data = await res.json();
-    if (res.ok && data.token){
-      localStorage.setItem('training-log:token', data.token);
-      return true;
-    }
-    return false;
-  }catch(e){
-    console.error('Auth error', e);
-    return false;
+function quizNext(){
+  const a = quiz.answers;
+  if (QUIZ[quiz.step].id === 'body'){
+    quiz.error =
+      !a.sex ? 'Выберите пол' :
+      !(a.age >= 12 && a.age <= 100) ? 'Укажите возраст — от 12 до 100 лет' :
+      !(a.height >= 120 && a.height <= 230) ? 'Укажите рост в сантиметрах — от 120 до 230' :
+      !(a.weight >= 30 && a.weight <= 250) ? 'Укажите вес в килограммах — от 30 до 250' : '';
+    if (quiz.error){ render(); return; }
   }
+  quizGo(1);
+}
+async function saveProfile(){
+  profile = { ...quiz.answers, date: todayStr() };
+  program = buildProgram(profile);
+  overrides = {};
+  quiz = null;
+  view = 'today';
+  render();
+  window.scrollTo(0, 0);
+  await saveAll();
+}
+
+function apiHeaders(){
+  return { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (session ? session.token : '') };
+}
+function storeSession(s){
+  session = s;
+  try {
+    if (s) localStorage.setItem('session', JSON.stringify(s));
+    else localStorage.removeItem('session');
+    localStorage.removeItem('training-log:token');
+  } catch (e) {}
+}
+async function authRequest(body){
+  const res = await fetch('/api/auth', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'Не удалось войти');
+  return { token: data.token, name: data.name };
+}
+function escapeHtml(s){
+  return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 }
 async function loadAll(){
   try{
-    const res = await fetch('/api/data', { headers: authHeader() });
-    if (res.status === 401) return { unauthorized: true };
-    if (!res.ok) throw new Error('bad status ' + res.status);
-    const data = await res.json();
+    const res = await fetch('/api/data', { headers: apiHeaders() });
+    if (res.status === 401) return { status: 'login' };
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return { status: 'error', message: data.error || 'Ошибка сервера ' + res.status };
     return {
+      status: 'ok',
       sessions: Array.isArray(data.sessions) ? data.sessions : [],
       overrides: (data.overrides && typeof data.overrides === 'object') ? data.overrides : {},
+      profile: (data.profile && typeof data.profile === 'object') ? data.profile : null,
       draft: data.draft || null
     };
   }catch(e){
     console.error('Load error', e);
-    return { sessions: [], overrides: {}, draft: null };
+    return { status: 'error', message: 'Нет связи с сервером' };
   }
 }
 async function saveAll(){
+  clearTimeout(saveTimer);
   try{
     const res = await fetch('/api/data', {
       method: 'POST',
-      headers: Object.assign({ 'Content-Type': 'application/json' }, authHeader()),
+      headers: apiHeaders(),
       body: JSON.stringify({
         sessions,
         overrides,
-        draft: activeType ? { type: activeType, exercises: draft } : null
+        profile,
+        draft: activeType && draft ? { type: activeType, exercises: draft } : null
       })
     });
     if (res.status === 401){
-      localStorage.removeItem('training-log:token');
-      view = 'login';
-      render();
+      storeSession(null);
+      loginError = 'Сессия истекла — войдите снова';
+      showLogin();
+      return;
     }
+    if (!res.ok) throw new Error('bad status ' + res.status);
+    if (saveFailed){ saveFailed = false; render(); }
   }catch(e){
     console.error('Save error', e);
+    saveFailed = true;
+    render();
   }
 }
-async function submitLoginCode(){
-  const input = document.getElementById('loginCodeInput');
-  const errEl = document.getElementById('loginError');
-  const code = (input.value || '').trim();
-  errEl.textContent = '';
-  if (!/^\d{6}$/.test(code)){
-    errEl.textContent = 'Код — это 6 цифр из бота';
-    return;
-  }
-  const ok = await exchangeForToken({ code });
-  if (!ok){
-    errEl.textContent = 'Код неверный или устарел — напиши боту /start ещё раз';
-    return;
-  }
-  view = 'loading';
-  render();
-  await startApp();
-}
+// Unfinished workout is saved as you type, so leaving the app mid-set loses nothing.
 let saveTimer = null;
 function scheduleSave(){
   clearTimeout(saveTimer);
   saveTimer = setTimeout(saveAll, 600);
+}
+async function showLogin(){
+  view = 'login';
+  render();
+  if (botName) return;
+  try {
+    const data = await fetch('/api/auth').then(r => r.json());
+    botName = data.bot || '';
+    if (!botName && data.error) loginError = data.error;
+  } catch (e) {}
+  if (view === 'login') render();
+}
+async function loginWithCode(){
+  const code = document.getElementById('codeInput').value.trim();
+  if (!code) return;
+  try {
+    storeSession(await authRequest({ code }));
+    loginError = '';
+    await init();
+  } catch (e) {
+    loginError = e.message;
+    render();
+  }
+}
+function logout(){
+  storeSession(null);
+  sessions = [];
+  overrides = {};
+  profile = null;
+  program = DEFAULT_PROGRAM;
+  loginError = '';
+  showLogin();
+}
+function setupTelegram(){
+  if (!TG_INIT_DATA) return;
+  const script = document.createElement('script');
+  script.src = 'https://telegram.org/js/telegram-web-app.js';
+  script.onload = () => {
+    const tg = window.Telegram && window.Telegram.WebApp;
+    if (!tg) return;
+    tg.ready();
+    tg.expand();
+    if (tg.isVersionAtLeast('6.1')){
+      tg.setHeaderColor('#000000');
+      tg.setBackgroundColor('#000000');
+    }
+    if (tg.isVersionAtLeast('7.7')) tg.disableVerticalSwipes();
+  };
+  document.head.appendChild(script);
 }
 function updateOverride(name, field, value){
   const num = parseInt(value, 10);
@@ -640,15 +1153,18 @@ async function resetOverrides(){
 
 function startWorkout(type, prefill){
   activeType = type;
-  draft = PROGRAM[type].map(ex => {
+  draft = program[type].map(ex => {
     const cfg = getConfig(ex);
     const prev = prefill && prefill.exercises.find(e => e.name === ex.name);
+    const advice = weightAdvice(cfg, profile, todayStr());
+    const suggested = advice && advice.weight ? String(advice.weight) : '';
     return {
       name: ex.name,
       target: targetText(cfg),
       isTime: !!ex.isTime,
+      advice,
       sets: Array.from({length: cfg.sets}, (_, i) => ({
-        value1: prev && prev.sets[i] ? prev.sets[i].value1 : '',
+        value1: prev && prev.sets[i] ? prev.sets[i].value1 : (prev ? '' : suggested),
         value2: prev && prev.sets[i] ? prev.sets[i].value2 : '',
         done: prev && prev.sets[i] ? prev.sets[i].done : false
       }))
@@ -756,8 +1272,8 @@ function pastMonths(){
 function renderHeader(){
   return `
     <header>
-      <h1>🐾 Дневник тренировок</h1>
-      <span class="date">${formatDateRu(todayStr())}</span>
+      <h1>Дневник тренировок</h1>
+      <div class="date">${formatDateRu(todayStr())}</div>
     </header>
   `;
 }
@@ -767,7 +1283,7 @@ function renderTabBar(active){
     <nav class="tabbar">
       ${TABS.map(t => `
         <button class="${active===t.id?'active':''}" onclick="switchTab('${t.id}')">
-          <span class="icon">${t.icon}</span>
+          ${icon(t.icon)}
           <span>${t.label}</span>
         </button>
       `).join('')}
@@ -777,7 +1293,6 @@ function renderTabBar(active){
 
 function renderToday(){
   const done = todaysSession();
-  const inProgress = !done && activeType && draft;
   const type = done ? done.type : nextType();
   const countA = sessions.filter(s => s.type === 'A').length;
   const countB = sessions.filter(s => s.type === 'B').length;
@@ -785,18 +1300,16 @@ function renderToday(){
   let heroHtml;
   if (done){
     heroHtml = `
-      <p class="section-header">Сегодня</p>
-      <div class="card hero">
-        <p class="eyebrow">Выполнено</p>
+      <div class="card">
+        <p class="eyebrow">Сегодня выполнено</p>
         <p class="hero-type">${TYPE_LABELS[done.type]}</p>
-        <p class="exercise-preview">${PROGRAM[done.type].map(e=>e.name).join(' · ')}</p>
+        <p class="exercise-preview">${done.exercises.map(e=>e.name).join(' · ')}</p>
         <button class="btn btn-outline" onclick="editToday()">Изменить запись</button>
       </div>
     `;
-  } else if (inProgress){
+  } else if (activeType && draft){
     heroHtml = `
-      <p class="section-header">Сегодня</p>
-      <div class="card hero">
+      <div class="card">
         <p class="eyebrow">Тренировка в процессе</p>
         <p class="hero-type">${TYPE_LABELS[activeType]}</p>
         <p class="exercise-preview">${draft.map(e=>e.name).join(' · ')}</p>
@@ -805,11 +1318,10 @@ function renderToday(){
     `;
   } else {
     heroHtml = `
-      <p class="section-header">Сегодня</p>
-      <div class="card hero">
+      <div class="card">
         <p class="eyebrow">Следующая тренировка</p>
         <p class="hero-type">${TYPE_LABELS[type]}</p>
-        <p class="exercise-preview">${PROGRAM[type].map(e=>e.name).join(' · ')}</p>
+        <p class="exercise-preview">${program[type].map(e=>e.name).join(' · ')}</p>
         <button class="btn btn-primary" onclick="startWorkout('${type}')">Начать тренировку</button>
       </div>
     `;
@@ -817,11 +1329,19 @@ function renderToday(){
 
   const now = new Date();
   const strip = monthGridHtml(monthGrid(now.getFullYear(), now.getMonth()));
+  const quizCard = profile ? '' : `
+    <div class="card">
+      <p class="eyebrow">Первоначальный тест</p>
+      <p class="quiz-title">Подберём программу под вас</p>
+      <p class="exercise-preview">7 коротких вопросов: пол, возраст, рост, вес, цель, опыт, где тренируетесь и есть ли ограничения по здоровью. Подберём упражнения и стартовые веса.</p>
+      <button class="btn btn-primary" onclick="startQuiz()">Пройти тест</button>
+    </div>
+  `;
 
   return `
-    ${heroHtml}
-    <p class="section-header">${monthName(now.getFullYear(), now.getMonth())}</p>
+    ${quizCard}
     <div class="card">
+      <p class="eyebrow" style="margin-bottom:10px;">${monthName(now.getFullYear(), now.getMonth())}</p>
       <div class="strip">${strip}</div>
       <div class="stats">
         <div class="stat"><div class="num">${sessions.length}</div><div class="lbl">тренировок всего</div></div>
@@ -829,12 +1349,20 @@ function renderToday(){
         <div class="stat"><div class="num">${countB}</div><div class="lbl">тип B</div></div>
       </div>
     </div>
+    ${heroHtml}
   `;
 }
 
+
 function renderWorkout(){
   const exercisesHtml = draft.map((ex, exIdx) => {
-    const perf = lastPerformance(ex.name);
+    const perf = lastPerformance(ex.name, todayStr());
+    const adv = ex.advice;
+    const adviceHtml = !adv ? '' : `
+      <p class="advice">
+        ${adv.weight ? `Рекомендуемый вес: <b>${loadLabel(ex.name, adv.weight)}${adv.trend === 'up' ? ' ↑' : adv.trend === 'down' ? ' ↓' : ''}</b><br>` : ''}${adv.text}
+      </p>
+    `;
     const setsHtml = ex.sets.map((s, setIdx) => {
       if (ex.isTime){
         return `
@@ -866,17 +1394,18 @@ function renderWorkout(){
             <h3>${ex.name}</h3>
             <p class="target">${ex.target}</p>
           </div>
-          <a class="video-btn" href="${videoSearchUrl(ex.name)}" target="_blank" rel="noopener">▶ Видео</a>
+          <a class="video-btn" href="${videoSearchUrl(ex.name)}" target="_blank" rel="noopener">${icon('play')}Видео</a>
         </div>
         <p class="last-time">${hintText(perf)}</p>
+        ${adviceHtml}
         ${setsHtml}
       </div>
     `;
   }).join('');
 
   return `
-    <p class="section-header">${TYPE_LABELS[activeType]}</p>
     <div class="card">
+      <p class="eyebrow">${TYPE_LABELS[activeType]}</p>
       ${exercisesHtml}
     </div>
     <div class="row-2">
@@ -888,33 +1417,35 @@ function renderWorkout(){
 
 function renderExercises(){
   const section = (label, list) => `
-    <p class="section-header">${label}</p>
-    <div class="card">
+    <p class="section-title">${label}</p>
+    <div class="card list">
       ${list.map(ex => {
         const cfg = getConfig(ex);
+        const adv = weightAdvice(cfg, profile);
         return `
           <div class="lib-row">
             <div>
               <div class="lib-name">${ex.name}</div>
               <div class="target">${targetText(cfg)}, ${cfg.sets} подхода</div>
+              ${adv && adv.weight ? `<div class="lib-advice">Рекомендуемый вес: ${loadLabel(ex.name, adv.weight)}</div>` : ''}
             </div>
-            <a class="video-btn" href="${videoSearchUrl(ex.name)}" target="_blank" rel="noopener">▶ Видео</a>
+            <a class="video-btn" href="${videoSearchUrl(ex.name)}" target="_blank" rel="noopener">${icon('play')}Видео</a>
           </div>
         `;
       }).join('')}
     </div>
   `;
   return `
-    <p class="lib-note">Ссылка открывает поиск на YouTube по технике выполнения — выбери ролик, который понравится.</p>
-    ${section('Тренировка A', PROGRAM.A)}
-    ${section('Тренировка B', PROGRAM.B)}
+    ${section('Тренировка A', program.A)}
+    ${section('Тренировка B', program.B)}
+    <p class="lib-note" style="margin-top:0;">«Видео» открывает поиск на YouTube по технике выполнения — выбери ролик, который понравится.</p>
   `;
 }
 
 function renderSettings(){
   const section = (label, list) => `
-    <p class="section-header">${label}</p>
-    <div class="card">
+    <p class="section-title">${label}</p>
+    <div class="card list">
       ${list.map(ex => {
         const cfg = getConfig(ex);
         return `
@@ -939,12 +1470,52 @@ function renderSettings(){
       }).join('')}
     </div>
   `;
+  const row = (ic, color, label, value) => `
+    <div class="row">
+      <span class="icon-sq" style="background:${color}">${icon(ic)}</span>
+      <span class="row-body"><span class="row-label">${label}</span><span class="row-value">${value}</span></span>
+    </div>
+  `;
+  const profileGroup = profile ? `
+    <div class="card list">
+      ${row('person', '#0091FF', 'Пол', SEX_LABELS[profile.sex] || '—')}
+      ${row('calendar', '#8E8E93', 'Возраст', profile.age)}
+      ${row('ruler', '#FF9230', 'Рост и вес', profile.height + ' см · ' + profile.weight + ' кг')}
+      ${row('heart', '#FF375F', 'ИМТ', bmiText(profile).replace('ИМТ ', ''))}
+      ${row('target', '#30D158', 'Цель', optionLabel('goal', profile.goal))}
+      ${row('star', '#6D7CFF', 'Опыт', optionLabel('level', profile.level))}
+      ${row('pin', '#00D2E0', 'Где', optionLabel('place', profile.place))}
+      ${row('clock', '#DB34F2', 'Время', optionLabel('duration', profile.duration))}
+      ${row('aid', '#FF4245', 'Боли и травмы', profile.limits.length ? profile.limits.map(l => optionLabel('limits', l)).join(', ') : 'нет')}
+    </div>
+    <div class="card list">
+      <button class="row" onclick="startQuiz()"><span class="row-body"><span class="row-label accent">Пройти тест заново</span></span></button>
+    </div>
+  ` : `
+    <div class="card list">
+      <button class="row" onclick="startQuiz()">
+        <span class="icon-sq" style="background:#0091FF">${icon('person')}</span>
+        <span class="row-body"><span class="row-label">Пройти тест</span>${icon('chevron')}</span>
+      </button>
+    </div>
+    <p class="lib-note">Тест не пройден — сейчас стандартная программа.</p>
+  `;
+  const accountGroup = session ? `
+    <p class="section-title" style="margin-top:4px;">Аккаунт</p>
+    <div class="card list">
+      ${row('send', '#2AABEE', 'Telegram', escapeHtml(session.name || ''))}
+      ${TG_INIT_DATA ? '' : `<button class="row" onclick="logout()"><span class="row-body"><span class="row-label" style="color:var(--red)">Выйти</span></span></button>`}
+    </div>
+  ` : '';
   return `
-    <p class="lib-note">Настрой количество подходов и повторений под себя. Изменения сохраняются и применяются при следующей тренировке.</p>
-    ${section('Тренировка A', PROGRAM.A)}
-    ${section('Тренировка B', PROGRAM.B)}
-    <div class="settings-link">
-      <button class="btn-ghost" onclick="resetOverrides()">${overridesResetArmed ? 'Точно сбросить к стандартным? Нажми ещё раз' : 'Сбросить к значениям по умолчанию'}</button>
+    ${accountGroup}
+    <p class="section-title">Профиль</p>
+    ${profileGroup}
+    ${section('Тренировка A', program.A)}
+    ${section('Тренировка B', program.B)}
+    <p class="lib-note" style="margin-top:0;">Подходы и повторения можно настроить под себя. Изменения применяются со следующей тренировки.</p>
+    <div class="card list">
+      <button class="row" onclick="resetOverrides()"><span class="row-body"><span class="row-label" style="color:var(--red)">${overridesResetArmed ? 'Точно сбросить? Нажми ещё раз' : 'Сбросить к значениям по умолчанию'}</span></span></button>
     </div>
   `;
 }
@@ -954,68 +1525,177 @@ function renderHistory(){
     return `<div class="card"><p class="empty">Пока нет записанных тренировок</p></div>`;
   }
   const monthCards = pastMonths().map(m => `
-    <p class="section-header">${monthName(m.year, m.month)}</p>
     <div class="card">
+      <p class="eyebrow">${monthName(m.year, m.month)}</p>
       <div class="strip">${monthGridHtml(monthGrid(m.year, m.month))}</div>
     </div>
   `).join('');
   const items = [...sessions].reverse().map(s => {
     const exHtml = s.exercises.map(ex => {
-      const txt = ex.sets.map(st => ex.isTime ? (st.value1+'сек') : (st.value1+'кг×'+st.value2)).join(', ');
+      const sets = filledSets(ex);
+      if (!sets.length) return '';
+      const txt = sets.map(st => ex.isTime ? (st.value1+'сек') : (st.value1+'кг×'+st.value2)).join(', ');
       return `<div class="hist-ex"><b>${ex.name}</b><br><span class="sets-txt">${txt}</span></div>`;
-    }).join('');
+    }).join('') || '<div class="hist-ex"><span class="sets-txt">Ничего не записано</span></div>';
     return `
       <details class="hist-item">
         <summary>
           <span>${formatDateRu(s.date)}</span>
-          <span class="type-badge">Тип ${s.type}</span>
+          <span class="row-value">Тип ${s.type}${icon('chevron')}</span>
         </summary>
         <div class="hist-body">${exHtml}</div>
       </details>
     `;
   }).join('');
-  return `
-    ${monthCards}
-    <p class="section-header">Все тренировки</p>
-    <div class="card">${items}</div>
-  `;
+  return monthCards + `<p class="section-title">Тренировки</p><div class="card list">${items}</div>`;
 }
 
 function renderProgress(){
-  const all = [...PROGRAM.A, ...PROGRAM.B];
+  const all = [...program.A, ...program.B].filter((ex, i, arr) => arr.findIndex(e => e.name === ex.name) === i);
   const rows = all.map(ex => {
     const perf = lastPerformance(ex.name);
     let val = '—';
     if (perf){
-      const best = perf.isTime
-        ? Math.max(...perf.sets.map(s => Number(s.value1)||0)) + ' сек'
-        : Math.max(...perf.sets.map(s => Number(s.value1)||0)) + ' кг';
-      val = best + ' · ' + formatDateRu(perf.date).split(',')[0];
+      const maxOf = field => Math.max(...perf.sets.map(s => Number(s[field]) || 0));
+      const best = perf.isTime ? maxOf('value1') + ' сек'
+        : maxOf('value1') > 0 ? kg(maxOf('value1')) + ' кг'
+        : maxOf('value2') + ' повт.';
+      val = best + ' · ' + new Date(perf.date+'T00:00:00').toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
+      const adv = weightAdvice(getConfig(ex), profile);
+      if (adv && adv.trend) val += `<span class="next-load ${adv.trend}">дальше ${loadLabel(ex.name, adv.weight, true)} ${adv.trend === 'up' ? '↑' : '↓'}</span>`;
     }
     return `<div class="progress-row"><span class="pname">${ex.name}</span><span class="pval">${val}</span></div>`;
   }).join('');
   return `
-    <p class="section-header">Лучшие результаты</p>
-    <div class="card">${rows}</div>
-    <div class="settings-link">
-      <button class="btn-ghost destructive" onclick="resetAll()">${resetArmed ? 'Точно удалить всё? Нажми ещё раз' : 'Сбросить все данные'}</button>
+    <p class="section-title" style="margin-top:4px;">Последний результат</p>
+    <div class="card list">${rows}</div>
+    <div class="card list">
+      <button class="row" onclick="resetAll()"><span class="row-body"><span class="row-label" style="color:var(--red)">${resetArmed ? 'Точно удалить всё? Нажми ещё раз' : 'Сбросить все данные'}</span></span></button>
+    </div>
+  `;
+}
+
+function renderQuiz(){
+  if (quiz.step === QUIZ.length) return renderQuizResult();
+  const step = QUIZ[quiz.step];
+  const a = quiz.answers;
+  let body;
+  if (step.id === 'body'){
+    const fields = [['age', 'Возраст', 'лет', 'numeric'], ['height', 'Рост', 'см', 'numeric'], ['weight', 'Вес', 'кг', 'decimal']];
+    body = `
+      <p class="quiz-title">Расскажите о себе</p>
+      <p class="quiz-sub">От этого зависят нагрузка, выбор упражнений и стартовые веса</p>
+      <div class="segmented">
+        ${Object.entries(SEX_LABELS).map(([v, label]) => `
+          <button class="${a.sex === v ? 'on' : ''}" onclick="quizSex('${v}')">${label}</button>
+        `).join('')}
+      </div>
+      <div class="card list">
+        ${fields.map(([f, label, unit, mode]) => `
+          <label class="row">
+            <span class="row-body">
+              <span class="row-label">${label}</span>
+              <input type="number" inputmode="${mode}" placeholder="0" value="${a[f] ?? ''}" oninput="quizBody('${f}', this.value)">
+              <span class="row-unit">${unit}</span>
+            </span>
+          </label>
+        `).join('')}
+      </div>
+    `;
+  } else {
+    const options = step.multi ? [...step.options, [null, 'Нет, всё в порядке']] : step.options;
+    const isOn = v => step.multi ? (v === null ? a.limits.length === 0 : a.limits.includes(v)) : a[step.id] === v;
+    body = `
+      <p class="quiz-title">${step.title}</p>
+      <p class="quiz-sub">${step.subtitle || ''}</p>
+      <div class="card list">
+        ${options.map(([v, label, hint], i) => `
+          <button class="row" onclick="quizChoose(${i})">
+            <span class="row-body">
+              <span class="row-text">
+                <span class="row-label">${label}</span>
+                ${hint ? `<span class="row-sub">${hint}</span>` : ''}
+              </span>
+              ${isOn(v) ? `<span class="check">${icon('check')}</span>` : ''}
+            </span>
+          </button>
+        `).join('')}
+      </div>
+    `;
+  }
+  const back = quiz.step > 0 ? `<button class="btn btn-outline" onclick="quizGo(-1)">Назад</button>` : '';
+  const next = (step.id === 'body' || step.multi) ? `<button class="btn btn-primary" onclick="quizNext()">Далее</button>` : '';
+  return `
+    <div class="quiz-top">
+      <span class="quiz-step">Шаг ${quiz.step + 1} из ${QUIZ.length}</span>
+      <button class="btn-ghost" onclick="quizExit()">Выйти</button>
+    </div>
+    <div class="quiz-bar"><span style="width:${(quiz.step + 1) / QUIZ.length * 100}%"></span></div>
+    ${body}
+    ${quiz.error ? `<p class="quiz-error">${quiz.error}</p>` : ''}
+    <div class="row-2">${back}${next}</div>
+  `;
+}
+
+function renderQuizResult(){
+  const a = quiz.answers;
+  const plan = buildProgram(a);
+  const planGroup = type => `
+    <p class="section-title">${TYPE_LABELS[type]}</p>
+    <div class="card list">
+      ${plan[type].map(ex => {
+        const range = ex.repsMin === ex.repsMax ? ex.repsMin : ex.repsMin + '–' + ex.repsMax;
+        const adv = weightAdvice(ex, a);
+        const load = adv && adv.weight ? `<span class="plan-load">${loadLabel(ex.name, adv.weight, true)}</span>` : '';
+        return `<div class="plan-row"><span>${ex.name}</span><span class="plan-sets">${ex.sets} × ${range}${ex.isTime ? ' сек' : ''}${load}</span></div>`;
+      }).join('')}
+    </div>
+  `;
+  const resetNote = Object.keys(overrides).length
+    ? '<p class="lib-note" style="margin-top:0;">Ручные настройки подходов и повторений будут сброшены.</p>'
+    : '';
+  return `
+    <div class="card">
+      <p class="eyebrow">Программа готова</p>
+      <p class="quiz-title">${optionLabel('goal', a.goal)}</p>
+      <p class="quiz-sub" style="margin-bottom:0;">${optionLabel('level', a.level)} · ${optionLabel('place', a.place)} · ${bmiText(a)}</p>
+      <ul class="notes">${planNotes(a).map(n => `<li>${n}</li>`).join('')}</ul>
+    </div>
+    ${planGroup('A')}
+    ${planGroup('B')}
+    ${resetNote}
+    <div class="row-2">
+      <button class="btn btn-outline" onclick="quizGo(-1)">Изменить ответы</button>
+      <button class="btn btn-primary" onclick="saveProfile()">Сохранить</button>
     </div>
   `;
 }
 
 function renderLogin(){
+  const bot = escapeHtml(botName);
   return `
-    <p class="section-header">Вход</p>
-    <div class="card hero">
-      <p class="hero-type" style="font-size:22px;">Код из Telegram</p>
-      <p class="exercise-preview">Напиши /start своему боту-дневнику — он пришлёт код. Введи его сюда:</p>
-      <div class="set-row" style="margin-bottom:14px;">
-        <input id="loginCodeInput" type="text" inputmode="numeric" maxlength="6" placeholder="000000"
-          style="text-align:center; font-size:22px; letter-spacing:6px;"
-          onkeydown="if(event.key==='Enter') submitLoginCode()">
-      </div>
-      <button class="btn btn-primary" onclick="submitLoginCode()">Войти</button>
-      <p id="loginError" style="color:var(--danger); font-size:13px; margin-top:12px;"></p>
+    <p class="quiz-title">Вход через Telegram</p>
+    <p class="quiz-sub">Дневник работает через Telegram-бота. Откройте его и нажмите «Старт» — бот пришлёт кнопку, чтобы открыть дневник прямо в Telegram, и код для входа здесь.</p>
+    ${bot ? `<a class="btn btn-primary" href="https://t.me/${bot}" target="_blank" rel="noopener" style="text-decoration:none;">Открыть @${bot}</a>` : ''}
+    <p class="section-title">Код из бота</p>
+    <div class="card list">
+      <label class="row">
+        <span class="row-body">
+          <span class="row-label">Код</span>
+          <input type="text" id="codeInput" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000" onkeydown="if (event.key === 'Enter') loginWithCode()">
+        </span>
+      </label>
+    </div>
+    ${loginError ? `<p class="quiz-error">${escapeHtml(loginError)}</p>` : ''}
+    <button class="btn btn-outline" onclick="loginWithCode()">Войти</button>
+  `;
+}
+
+function renderLoadError(){
+  return `
+    <div class="card">
+      <p class="empty">Не удалось загрузить данные<br><span style="font-size:13px;">${escapeHtml(loadError)}</span></p>
+      <button class="btn btn-primary" onclick="init()">Повторить</button>
     </div>
   `;
 }
@@ -1026,11 +1706,8 @@ function render(){
     app.innerHTML = renderHeader() + '<p class="empty">Загрузка…</p>';
     return;
   }
-  if (view === 'login'){
-    app.innerHTML = renderHeader() + renderLogin();
-    return;
-  }
   const activeTab = view === 'workout' ? 'today' : view;
+  const bare = view === 'quiz' || view === 'login' || view === 'error';
   let body = '';
   if (view === 'today') body = renderToday();
   else if (view === 'workout') body = renderWorkout();
@@ -1038,50 +1715,64 @@ function render(){
   else if (view === 'settings') body = renderSettings();
   else if (view === 'history') body = renderHistory();
   else if (view === 'progress') body = renderProgress();
-  app.innerHTML = renderHeader() + renderTabBar(activeTab) + body;
+  else if (view === 'quiz') body = renderQuiz();
+  else if (view === 'login') body = renderLogin();
+  else if (view === 'error') body = renderLoadError();
+  const banner = saveFailed ? `
+    <div class="banner">
+      <span>Не удалось сохранить изменения</span>
+      <button onclick="saveAll()">Повторить</button>
+    </div>
+  ` : '';
+  app.innerHTML = renderHeader() + (bare ? '' : renderTabBar(activeTab)) + banner + body;
 }
 
-async function startApp(){
+async function init(){
+  view = 'loading';
+  render();
+  if (TG_INIT_DATA){
+    try { storeSession(await authRequest({ initData: TG_INIT_DATA })); }
+    catch (e) { loginError = e.message; }
+  }
+  if (!session){
+    showLogin();
+    return;
+  }
   const data = await loadAll();
-  if (data.unauthorized){
-    localStorage.removeItem('training-log:token');
-    view = 'login';
+  if (data.status === 'login'){
+    storeSession(null);
+    showLogin();
+    return;
+  }
+  if (data.status === 'error'){
+    loadError = data.message || '';
+    view = 'error';
     render();
     return;
   }
+  loginError = '';
   sessions = data.sessions;
   overrides = data.overrides;
-  if (data.draft && data.draft.type && PROGRAM[data.draft.type] && Array.isArray(data.draft.exercises)){
-    activeType = data.draft.type;
-    draft = data.draft.exercises;
+  profile = data.profile;
+  program = profile ? buildProgram(profile) : DEFAULT_PROGRAM;
+  const saved = data.draft;
+  if (saved && program[saved.type] && Array.isArray(saved.exercises)){
+    activeType = saved.type;
+    draft = saved.exercises;
     view = 'workout';
   } else {
+    activeType = null;
+    draft = null;
     view = 'today';
   }
   render();
 }
 
-(async function init(){
-  try{ if (window.Telegram && window.Telegram.WebApp) window.Telegram.WebApp.ready(); }catch(e){}
-  render();
-  if (!getToken()){
-    const initData = tgInitData();
-    if (initData) await exchangeForToken({ initData });
-  }
-  if (getToken()){
-    await startApp();
-  } else {
-    view = 'login';
-    render();
-  }
-})();
-
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'hidden' && activeType){
-    clearTimeout(saveTimer);
-    saveAll();
-  }
+  if (document.visibilityState === 'hidden' && activeType) saveAll();
 });
+setupTelegram();
+init();
 </script>
 </body>
 </html>
