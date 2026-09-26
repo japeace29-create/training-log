@@ -544,7 +544,8 @@ const ICONS = {
   chevron: '<path d="M9.5 6l6 6-6 6"/>',
   check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
   send: '<path d="M21 3.5 3 10.8l6.8 2.4L12.2 20z"/><path d="M9.8 13.2 21 3.5"/>',
-  stairs: '<path d="M3 19h5v-4.5h5V10h5V5.5h3"/>'
+  stairs: '<path d="M3 19h5v-4.5h5V10h5V5.5h3"/>',
+  chart: '<path d="M5 19V9"/><path d="M12 19V5"/><path d="M19 19v-6"/>'
 };
 function icon(name){
   return '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true">' + ICONS[name] + '</svg>';
@@ -758,6 +759,8 @@ let botName = '';
 let loginError = '';
 let loadError = '';
 let saveFailed = false;
+let stats = null;
+let statsChecked = false;
 let activeType = null;
 let draft = null;
 let resetArmed = false;
@@ -1083,8 +1086,15 @@ async function loadAll(){
     return { status: 'error', message: 'Нет связи с сервером' };
   }
 }
-async function saveAll(){
+// Сохранения идут строго по очереди: иначе более раннее могло прийти
+// последним и затереть только что завершённую тренировку.
+let saveChain = Promise.resolve();
+function saveAll(){
   clearTimeout(saveTimer);
+  saveChain = saveChain.catch(() => {}).then(sendSave);
+  return saveChain;
+}
+async function sendSave(){
   try{
     const res = await fetch('/api/data', {
       method: 'POST',
@@ -1115,6 +1125,16 @@ let saveTimer = null;
 function scheduleSave(){
   clearTimeout(saveTimer);
   saveTimer = setTimeout(saveAll, 600);
+}
+async function loadStats(){
+  statsChecked = true;
+  try {
+    const res = await fetch('/api/stats', { headers: apiHeaders() });
+    stats = res.ok ? await res.json() : null;
+  } catch (e) {
+    stats = null;
+  }
+  if (view === 'settings') render();
 }
 async function showLogin(){
   view = 'login';
@@ -1252,6 +1272,7 @@ function toggleDone(exIdx, setIdx){
 }
 function switchTab(v){
   view = v; render();
+  if (v === 'settings' && !statsChecked) loadStats();
 }
 async function resetAll(){
   if (!resetArmed){
@@ -1564,14 +1585,28 @@ function renderSettings(){
     </div>
     <p class="lib-note">Тест не пройден — сейчас стандартная программа.</p>
   `;
+  const statsGroup = stats ? `
+    <p class="section-title" style="margin-top:4px;">Статистика</p>
+    <div class="card list">
+      ${row('person', '#0091FF', 'Всего людей', stats.users)}
+      ${row('clock', '#30D158', 'Заходили за 7 дней', stats.active7)}
+      ${row('calendar', '#8E8E93', 'Заходили за 30 дней', stats.active30)}
+      ${row('star', '#6D7CFF', 'Новых за 7 дней', stats.joined7)}
+      ${row('target', '#FF9230', 'Прошли тест', stats.profiles)}
+      ${row('stairs', '#DB34F2', 'Записали тренировки', stats.withWorkout)}
+      ${row('chart', '#FF375F', 'Всего тренировок', stats.workouts)}
+    </div>
+  ` : '';
   const accountGroup = session ? `
-    <p class="section-title" style="margin-top:4px;">Аккаунт</p>
+    <p class="section-title"${stats ? '' : ' style="margin-top:4px;"'}>Аккаунт</p>
     <div class="card list">
       ${row('send', '#2AABEE', 'Telegram', escapeHtml(session.name || ''))}
+      ${row('person', '#8E8E93', 'Ваш ID', session.token ? session.token.split('.')[0] : '—')}
       ${TG_INIT_DATA ? '' : `<button class="row" onclick="logout()"><span class="row-body"><span class="row-label" style="color:var(--red)">Выйти</span></span></button>`}
     </div>
   ` : '';
   return `
+    ${statsGroup}
     ${accountGroup}
     <p class="section-title">Профиль</p>
     ${profileGroup}

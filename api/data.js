@@ -1,5 +1,14 @@
-const { kvGet, kvSet } = require('./_lib');
+const { kvCommand, kvGet, kvSet } = require('./_lib');
 const { userIdFromRequest } = require('./_auth');
+
+// Открытие приложения отмечаем для статистики: кто когда пришёл и заходил.
+async function trackVisit(userId){
+  const now = String(Date.now());
+  await Promise.all([
+    kvCommand(['HSET', 'training-log:seen', userId, now]),
+    kvCommand(['HSETNX', 'training-log:first', userId, now])
+  ]);
+}
 
 function normalize(d){
   return {
@@ -20,7 +29,7 @@ module.exports = async (req, res) => {
     const key = 'training-log:data:' + userId;
 
     if (req.method === 'GET') {
-      const raw = await kvGet(key);
+      const [raw] = await Promise.all([kvGet(key), trackVisit(userId)]);
       res.status(200).json(normalize(raw ? JSON.parse(raw) : {}));
       return;
     }
