@@ -10,12 +10,25 @@ async function trackVisit(userId){
   ]);
 }
 
+function reminders(r){
+  if (!r || typeof r !== 'object') return null;
+  const days = Array.isArray(r.days) ? r.days.filter(d => Number.isInteger(d) && d >= 0 && d <= 6) : [];
+  if (!/^\d{2}:\d{2}$/.test(String(r.time || ''))) return null;
+  return {
+    enabled: !!r.enabled,
+    days,
+    time: String(r.time),
+    tz: typeof r.tz === 'string' ? r.tz.slice(0, 64) : 'UTC'
+  };
+}
+
 function normalize(d){
   return {
     sessions: Array.isArray(d.sessions) ? d.sessions : [],
     overrides: (d.overrides && typeof d.overrides === 'object') ? d.overrides : {},
     profile: (d.profile && typeof d.profile === 'object') ? d.profile : null,
-    draft: d.draft || null
+    draft: d.draft || null,
+    reminders: reminders(d.reminders)
   };
 }
 

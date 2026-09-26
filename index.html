@@ -154,6 +154,55 @@
     padding:0;
   }
   .row input:focus{outline:none;}
+  .row input[type="time"]{
+    flex:0 0 auto;
+    color-scheme:dark;
+    cursor:pointer;
+  }
+  .switch{
+    flex:0 0 auto;
+    width:46px;
+    height:28px;
+    border-radius:14px;
+    background:var(--surface-3);
+    position:relative;
+    transition:background .15s;
+  }
+  .switch::after{
+    content:'';
+    position:absolute;
+    top:2px;
+    left:2px;
+    width:24px;
+    height:24px;
+    border-radius:50%;
+    background:#fff;
+    transition:transform .15s;
+  }
+  .switch.on{background:var(--green);}
+  .switch.on::after{transform:translateX(18px);}
+  .days{
+    display:flex;
+    gap:6px;
+    padding:12px 16px 14px;
+  }
+  .days button{
+    flex:1;
+    padding:9px 0;
+    border-radius:var(--radius-s);
+    border:1px solid var(--separator);
+    background:var(--surface-2);
+    color:var(--text-muted);
+    font:inherit;
+    font-size:13px;
+    font-weight:600;
+    cursor:pointer;
+  }
+  .days button.on{
+    background:var(--accent);
+    border-color:var(--accent);
+    color:#fff;
+  }
   .row input::placeholder{color:var(--text-faint);}
   .row-unit{font-size:16px; color:var(--text-muted); width:26px;}
   .icon-sq{
@@ -761,6 +810,7 @@ let loadError = '';
 let saveFailed = false;
 let stats = null;
 let statsChecked = false;
+let reminders = null;
 let activeType = null;
 let draft = null;
 let resetArmed = false;
@@ -1079,7 +1129,8 @@ async function loadAll(){
       sessions: Array.isArray(data.sessions) ? data.sessions : [],
       overrides: (data.overrides && typeof data.overrides === 'object') ? data.overrides : {},
       profile: (data.profile && typeof data.profile === 'object') ? data.profile : null,
-      draft: data.draft || null
+      draft: data.draft || null,
+      reminders: (data.reminders && typeof data.reminders === 'object') ? data.reminders : null
     };
   }catch(e){
     console.error('Load error', e);
@@ -1103,6 +1154,7 @@ async function sendSave(){
         sessions,
         overrides,
         profile,
+        reminders,
         draft: activeType && draft ? { type: activeType, exercises: draft } : null
       })
     });
@@ -1125,6 +1177,32 @@ let saveTimer = null;
 function scheduleSave(){
   clearTimeout(saveTimer);
   saveTimer = setTimeout(saveAll, 600);
+}
+function timezone(){
+  try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'; } catch (e) { return 'UTC'; }
+}
+function toggleReminders(){
+  if (!reminders) reminders = { enabled: false, days: [1, 3, 5], time: '18:00', tz: timezone() };
+  reminders.enabled = !reminders.enabled;
+  reminders.tz = timezone();
+  if (reminders.enabled && !reminders.days.length) reminders.days = [1, 3, 5];
+  render();
+  saveAll();
+}
+function toggleReminderDay(day){
+  const i = reminders.days.indexOf(day);
+  if (i >= 0) reminders.days.splice(i, 1);
+  else reminders.days.push(day);
+  reminders.days.sort();
+  render();
+  saveAll();
+}
+function setReminderTime(value){
+  if (!/^\d{2}:\d{2}$/.test(value)) return;
+  reminders.time = value;
+  reminders.tz = timezone();
+  render();
+  saveAll();
 }
 async function loadStats(){
   statsChecked = true;
@@ -1585,8 +1663,38 @@ function renderSettings(){
     </div>
     <p class="lib-note">Тест не пройден — сейчас стандартная программа.</p>
   `;
+  const on = !!(reminders && reminders.enabled);
+  const dayLabels = [['Пн', 1], ['Вт', 2], ['Ср', 3], ['Чт', 4], ['Пт', 5], ['Сб', 6], ['Вс', 0]];
+  const remindersGroup = `
+    <p class="section-title" style="margin-top:4px;">Напоминания</p>
+    <div class="card list">
+      <button class="row" onclick="toggleReminders()">
+        <span class="icon-sq" style="background:#FF9230">${icon('clock')}</span>
+        <span class="row-body">
+          <span class="row-label">Напоминать в Telegram</span>
+          <span class="switch ${on ? 'on' : ''}"></span>
+        </span>
+      </button>
+      ${on ? `
+        <div class="days">
+          ${dayLabels.map(([label, day]) => `
+            <button class="${reminders.days.includes(day) ? 'on' : ''}" onclick="toggleReminderDay(${day})">${label}</button>
+          `).join('')}
+        </div>
+        <label class="row">
+          <span class="row-body">
+            <span class="row-label">Время</span>
+            <input type="time" value="${reminders.time}" onchange="setReminderTime(this.value)">
+          </span>
+        </label>
+      ` : ''}
+    </div>
+    <p class="lib-note">${on
+      ? 'Бот напишет в выбранные дни. Если вы уже потренировались в этот день, напоминание не придёт.'
+      : 'Бот будет напоминать о тренировке в выбранные дни и время.'}</p>
+  `;
   const statsGroup = stats ? `
-    <p class="section-title" style="margin-top:4px;">Статистика</p>
+    <p class="section-title">Статистика</p>
     <div class="card list">
       ${row('person', '#0091FF', 'Всего людей', stats.users)}
       ${row('clock', '#30D158', 'Заходили за 7 дней', stats.active7)}
@@ -1598,7 +1706,7 @@ function renderSettings(){
     </div>
   ` : '';
   const accountGroup = session ? `
-    <p class="section-title"${stats ? '' : ' style="margin-top:4px;"'}>Аккаунт</p>
+    <p class="section-title">Аккаунт</p>
     <div class="card list">
       ${row('send', '#2AABEE', 'Telegram', escapeHtml(session.name || ''))}
       ${row('person', '#8E8E93', 'Ваш ID', session.token ? session.token.split('.')[0] : '—')}
@@ -1606,6 +1714,7 @@ function renderSettings(){
     </div>
   ` : '';
   return `
+    ${remindersGroup}
     ${statsGroup}
     ${accountGroup}
     <p class="section-title">Профиль</p>
@@ -1853,6 +1962,7 @@ async function init(){
   sessions = data.sessions;
   overrides = data.overrides;
   profile = data.profile;
+  reminders = data.reminders;
   program = profile ? buildProgram(profile) : DEFAULT_PROGRAM;
   const saved = data.draft;
   if (saved && program[saved.type] && Array.isArray(saved.exercises)){
