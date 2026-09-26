@@ -822,7 +822,8 @@ const TG_INIT_DATA = new URLSearchParams(location.hash.slice(1)).get('tgWebAppDa
 let botName = '';
 let loginError = '';
 let loadError = '';
-let saveFailed = false;
+let pendingSave = false;   // есть изменения, которые сервер ещё не принял
+let offline = false;       // последняя попытка достучаться до сервера не удалась
 let stats = null;
 let statsChecked = false;
 let reminders = null;
@@ -1178,6 +1179,63 @@ async function authRequest(body){
 function escapeHtml(s){
   return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 }
+// Копия данных на телефоне: с ней приложение открывается и работает без сети.
+function cacheKey(){
+  const id = session && session.token ? session.token.split('.')[0] : '';
+  return 'training-log:cache:' + id;
+}
+function readCache(){
+  try { return JSON.parse(localStorage.getItem(cacheKey()) || 'null'); }
+  catch (e) { return null; }
+}
+function writeCache(pending){
+  try {
+    localStorage.setItem(cacheKey(), JSON.stringify({
+      sessions,
+      overrides,
+      profile,
+      reminders,
+      draft: activeType && draft ? { type: activeType, exercises: draft } : null,
+      pending: !!pending,
+      at: Date.now()
+    }));
+  } catch (e) {}
+}
+function dropCache(){
+  try { localStorage.removeItem(cacheKey()); } catch (e) {}
+}
+function applyData(data){
+  sessions = Array.isArray(data.sessions) ? data.sessions : [];
+  overrides = (data.overrides && typeof data.overrides === 'object') ? data.overrides : {};
+  profile = (data.profile && typeof data.profile === 'object') ? data.profile : null;
+  reminders = (data.reminders && typeof data.reminders === 'object') ? data.reminders : null;
+  program = profile ? buildProgram(profile) : DEFAULT_PROGRAM;
+  const saved = data.draft;
+  if (saved && program[saved.type] && Array.isArray(saved.exercises)){
+    activeType = saved.type;
+    draft = saved.exercises;
+    view = 'workout';
+  } else {
+    activeType = null;
+    draft = null;
+    view = 'today';
+  }
+}
+// Записи, сделанные без сети, могли разойтись с сервером (например, человек
+// заходил с другого телефона). Тренировки объединяем по дате, остальное берём
+// своё — оно новее.
+function mergeData(local, remote){
+  const byDate = new Map();
+  (remote.sessions || []).forEach(s => byDate.set(s.date, s));
+  (local.sessions || []).forEach(s => byDate.set(s.date, s));
+  return {
+    sessions: [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date)),
+    overrides: local.overrides,
+    profile: local.profile || remote.profile,
+    reminders: local.reminders || remote.reminders,
+    draft: local.draft || remote.draft
+  };
+}
 async function loadAll(){
   try{
     const res = await fetch('/api/data', { headers: apiHeaders() });
@@ -1202,11 +1260,23 @@ async function loadAll(){
 let saveChain = Promise.resolve();
 function saveAll(){
   clearTimeout(saveTimer);
+  writeCache(true);
   saveChain = saveChain.catch(() => {}).then(sendSave);
   return saveChain;
 }
+// Перед досылкой накопленного забираем серверное: пока телефон был без сети,
+// тренировка могла записаться с другого устройства, терять её нельзя.
+async function pullAndMerge(){
+  const data = await loadAll();
+  if (data.status !== 'ok' || !Array.isArray(data.sessions)) return;
+  const byDate = new Map();
+  data.sessions.forEach(s => byDate.set(s.date, s));
+  sessions.forEach(s => byDate.set(s.date, s));
+  sessions = [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date));
+}
 async function sendSave(){
   try{
+    if (pendingSave) await pullAndMerge();
     const res = await fetch('/api/data', {
       method: 'POST',
       headers: apiHeaders(),
@@ -1225,10 +1295,16 @@ async function sendSave(){
       return;
     }
     if (!res.ok) throw new Error('bad status ' + res.status);
-    if (saveFailed){ saveFailed = false; render(); }
+    writeCache(false);
+    if (pendingSave || offline){
+      pendingSave = false;
+      offline = false;
+      render();
+    }
   }catch(e){
     console.error('Save error', e);
-    saveFailed = true;
+    // Данные уже лежат на телефоне — отправим их, как только вернётся связь.
+    pendingSave = true;
     render();
   }
 }
@@ -1236,6 +1312,7 @@ async function sendSave(){
 let saveTimer = null;
 function scheduleSave(){
   clearTimeout(saveTimer);
+  writeCache(true);
   saveTimer = setTimeout(saveAll, 600);
 }
 const DAY_LABELS = [['Пн', 1], ['Вт', 2], ['Ср', 3], ['Чт', 4], ['Пт', 5], ['Сб', 6], ['Вс', 0]];
@@ -1430,6 +1507,7 @@ async function loginWithCode(){
   }
 }
 function logout(){
+  dropCache();
   storeSession(null);
   sessions = [];
   overrides = {};
@@ -2156,10 +2234,15 @@ function render(){
   else if (view === 'quiz') body = renderQuiz();
   else if (view === 'login') body = renderLogin();
   else if (view === 'error') body = renderLoadError();
-  const banner = saveFailed ? `
+  const banner = pendingSave ? `
     <div class="banner">
-      <span>Не удалось сохранить изменения</span>
+      <span>Записано на телефоне. Отправим на сервер, когда появится связь.</span>
       <button onclick="saveAll()">Повторить</button>
+    </div>
+  ` : offline ? `
+    <div class="banner">
+      <span>Нет связи — показаны данные с телефона.</span>
+      <button onclick="init()">Обновить</button>
     </div>
   ` : '';
   app.innerHTML = renderHeader() + (bare ? '' : renderTabBar(activeTab)) + banner + body;
@@ -2176,40 +2259,56 @@ async function init(){
     showLogin();
     return;
   }
+  // Пока идёт запрос к серверу, человек уже видит свои данные.
+  const cached = readCache();
+  if (cached){
+    applyData(cached);
+    render();
+  }
   const data = await loadAll();
   if (data.status === 'login'){
+    dropCache();
     storeSession(null);
     showLogin();
     return;
   }
   if (data.status === 'error'){
+    if (cached){
+      offline = true;
+      pendingSave = pendingSave || !!cached.pending;
+      render();
+      return;
+    }
     loadError = data.message || '';
     view = 'error';
     render();
     return;
   }
   loginError = '';
-  sessions = data.sessions;
-  overrides = data.overrides;
-  profile = data.profile;
-  reminders = data.reminders;
-  program = profile ? buildProgram(profile) : DEFAULT_PROGRAM;
-  const saved = data.draft;
-  if (saved && program[saved.type] && Array.isArray(saved.exercises)){
-    activeType = saved.type;
-    draft = saved.exercises;
-    view = 'workout';
-  } else {
-    activeType = null;
-    draft = null;
-    view = 'today';
+  offline = false;
+  if (cached && cached.pending){
+    // Что-то записали без сети — досылаем и объединяем с серверным.
+    applyData(mergeData(cached, data));
+    render();
+    saveAll();
+    return;
   }
+  applyData(data);
+  writeCache(false);
   render();
 }
 
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'hidden' && activeType) saveAll();
+  if (document.visibilityState === 'visible' && pendingSave) saveAll();
 });
+window.addEventListener('online', () => {
+  if (pendingSave) saveAll();
+  else if (offline) init();
+});
+if ('serviceWorker' in navigator){
+  window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));
+}
 setupTelegram();
 init();
 </script>
