@@ -79,7 +79,13 @@ async function botRequest(method, params) {
     body: JSON.stringify(params || {})
   });
   const data = await res.json();
-  if (!data.ok) throw new Error('Telegram ' + method + ': ' + data.description);
+  if (!data.ok) {
+    // Код и retry_after нужны рассылке: 403 — бот заблокирован, 429 — перебор.
+    const err = new Error('Telegram ' + method + ': ' + data.description);
+    err.code = data.error_code;
+    err.retryAfter = data.parameters && data.parameters.retry_after;
+    throw err;
+  }
   return data.result;
 }
 

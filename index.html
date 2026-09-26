@@ -204,6 +204,20 @@
     color:#fff;
   }
   .row input::placeholder{color:var(--text-faint);}
+  .bc-text{
+    width:100%;
+    background:none;
+    border:none;
+    resize:vertical;
+    color:var(--text);
+    font:inherit;
+    font-size:16px;
+    line-height:1.4;
+    padding:4px 0;
+  }
+  .bc-text:focus{outline:none;}
+  .bc-text::placeholder{color:var(--text-faint);}
+  .btn:disabled{opacity:0.4; cursor:default;}
   .row-unit{font-size:16px; color:var(--text-muted); width:26px;}
   .icon-sq{
     flex:0 0 auto;
@@ -815,6 +829,30 @@ let activeType = null;
 let draft = null;
 let resetArmed = false;
 let overridesResetArmed = false;
+const BROADCAST_LIMIT = 1024;
+const BROADCAST_PHOTO = '/promo/reminders.png';
+const BROADCAST_DEFAULT = [
+  '⏰ Дневник теперь напоминает о тренировках',
+  '',
+  'Бот напишет в выбранные дни и время — расписание можно не держать в голове.',
+  '',
+  'Как включить:',
+  '1. Откройте дневник → «Настройки»',
+  '2. Включите «Напоминать в Telegram»',
+  '3. Отметьте дни недели и поставьте время',
+  '',
+  'Время считается по вашему часовому поясу. Если вы уже записали тренировку в этот день, напоминание не придёт. Больше одного сообщения в день бот не отправит, а выключить всё можно тем же переключателем.'
+].join('\n');
+let broadcast = null;
+// Черновик переживает перезагрузку: длинный текст обидно набирать дважды.
+let broadcastText = (() => {
+  try { const saved = localStorage.getItem('broadcast-draft'); return saved === null ? BROADCAST_DEFAULT : saved; }
+  catch (e) { return BROADCAST_DEFAULT; }
+})();
+let broadcastPhoto = true;
+let broadcastBusy = false;
+let broadcastArmed = false;
+let broadcastNote = '';
 
 function todayStr(d){
   d = d || new Date();
@@ -1213,6 +1251,103 @@ async function loadStats(){
     stats = null;
   }
   if (view === 'settings') render();
+  if (stats) loadBroadcast();
+}
+async function loadBroadcast(){
+  try {
+    const res = await fetch('/api/broadcast', { headers: apiHeaders() });
+    broadcast = res.ok ? (await res.json()).job : null;
+  } catch (e) {
+    broadcast = null;
+  }
+  if (view === 'settings') render();
+}
+async function broadcastRequest(body){
+  const res = await fetch('/api/broadcast', { method: 'POST', headers: apiHeaders(), body: JSON.stringify(body) });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'Ошибка сервера ' + res.status);
+  return data;
+}
+function broadcastBody(){
+  return { text: broadcastText, photo: broadcastPhoto ? BROADCAST_PHOTO : '' };
+}
+function editBroadcast(value){
+  broadcastText = value;
+  try { localStorage.setItem('broadcast-draft', value); } catch (e) {}
+  const left = document.getElementById('bc-count');
+  if (left) left.textContent = broadcastCount();
+}
+function broadcastCount(){
+  return `${broadcastText.length} из ${BROADCAST_LIMIT} символов. Можно выделять <b>жирным</b> и <i>курсивом</i>.`;
+}
+function toggleBroadcastPhoto(){
+  broadcastPhoto = !broadcastPhoto;
+  render();
+}
+async function sendBroadcastTest(){
+  broadcastBusy = true;
+  broadcastNote = '';
+  render();
+  try {
+    await broadcastRequest({ mode: 'test', ...broadcastBody() });
+    broadcastNote = 'Отправил только вам — посмотрите в боте, как это выглядит.';
+  } catch (e) {
+    broadcastNote = e.message;
+  }
+  broadcastBusy = false;
+  render();
+}
+async function startBroadcast(){
+  // Отправка всем необратима, поэтому нужно нажать дважды.
+  if (!broadcastArmed){
+    broadcastArmed = true;
+    render();
+    setTimeout(() => { broadcastArmed = false; if (view === 'settings') render(); }, 4000);
+    return;
+  }
+  broadcastArmed = false;
+  broadcastBusy = true;
+  broadcastNote = '';
+  render();
+  try {
+    broadcast = (await broadcastRequest({ mode: 'start', ...broadcastBody() })).job;
+    render();
+    await broadcastLoop();
+  } catch (e) {
+    broadcastNote = e.message;
+  }
+  broadcastBusy = false;
+  render();
+}
+// Сервер за один вызов успевает отправить не всем, поэтому идём частями.
+async function broadcastLoop(){
+  for (let i = 0; i < 200 && broadcast && !broadcast.done; i++){
+    broadcast = (await broadcastRequest({ mode: 'resume' })).job;
+    render();
+  }
+  broadcastNote = broadcast && broadcast.done ? 'Рассылка закончена.' : 'Отправлено не всем — нажмите «Продолжить».';
+}
+// Если вкладку закрыли на середине, рассылку можно доотправить позже.
+async function continueBroadcast(){
+  broadcastBusy = true;
+  broadcastNote = '';
+  render();
+  try {
+    await broadcastLoop();
+  } catch (e) {
+    broadcastNote = e.message;
+  }
+  broadcastBusy = false;
+  render();
+}
+async function stopBroadcast(){
+  try {
+    broadcast = (await broadcastRequest({ mode: 'cancel' })).job;
+    broadcastNote = 'Остановлено.';
+  } catch (e) {
+    broadcastNote = e.message;
+  }
+  render();
 }
 async function showLogin(){
   view = 'login';
@@ -1705,6 +1840,46 @@ function renderSettings(){
       ${row('chart', '#FF375F', 'Всего тренировок', stats.workouts)}
     </div>
   ` : '';
+  const bc = broadcast;
+  const progressLine = bc ? `
+    <p class="lib-note" style="margin-bottom:6px;">
+      Отправлено ${bc.sent} из ${bc.total}${bc.blocked ? ' · заблокировали бота ' + bc.blocked : ''}${bc.failed ? ' · ошибок ' + bc.failed : ''}
+    </p>
+    <div class="quiz-bar" style="margin:0 18px 14px;"><span style="width:${bc.total ? Math.round((bc.sent + bc.failed + bc.blocked) / bc.total * 100) : 0}%"></span></div>
+  ` : '';
+  const broadcastGroup = stats ? `
+    <p class="section-title">Рассылка</p>
+    <div class="card list">
+      <div class="row">
+        <textarea class="bc-text" rows="7" placeholder="Текст сообщения всем пользователям" oninput="editBroadcast(this.value)">${escapeHtml(broadcastText)}</textarea>
+      </div>
+      <button class="row" onclick="toggleBroadcastPhoto()">
+        <span class="icon-sq" style="background:#DB34F2">${icon('pin')}</span>
+        <span class="row-body">
+          <span class="row-label">Приложить картинку</span>
+          <span class="switch ${broadcastPhoto ? 'on' : ''}"></span>
+        </span>
+      </button>
+    </div>
+    <p class="lib-note" id="bc-count">${broadcastCount()}</p>
+    ${progressLine}
+    <div class="row-2" style="margin:0 16px;">
+      <button class="btn btn-outline" style="flex:0 0 104px;" onclick="sendBroadcastTest()" ${broadcastBusy ? 'disabled' : ''}>Себе</button>
+      ${bc && !bc.done ? `
+        <button class="btn btn-primary" onclick="continueBroadcast()" ${broadcastBusy ? 'disabled' : ''}>
+          ${broadcastBusy ? 'Отправляю…' : 'Продолжить'}
+        </button>
+      ` : `
+        <button class="btn btn-primary" onclick="startBroadcast()" ${broadcastBusy || !broadcastText.trim() ? 'disabled' : ''}>
+          ${broadcastBusy ? 'Отправляю…' : broadcastArmed ? 'Точно всем?' : 'Отправить всем'}
+        </button>
+      `}
+    </div>
+    ${bc && !bc.done ? `<div class="settings-link"><button class="btn-ghost" onclick="stopBroadcast()">Остановить</button></div>` : ''}
+    <p class="lib-note" style="margin-top:12px;">${broadcastNote
+      ? escapeHtml(broadcastNote)
+      : 'Сообщение уйдёт всем, кто открывал дневник. Сначала отправьте его себе.'}</p>
+  ` : '';
   const accountGroup = session ? `
     <p class="section-title">Аккаунт</p>
     <div class="card list">
@@ -1716,6 +1891,7 @@ function renderSettings(){
   return `
     ${remindersGroup}
     ${statsGroup}
+    ${broadcastGroup}
     ${accountGroup}
     <p class="section-title">Профиль</p>
     ${profileGroup}
