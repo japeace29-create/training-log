@@ -527,6 +527,38 @@
   }
   .segmented button.on{background:var(--surface-3);}
   .quiz-error{color:var(--red); font-size:14px; margin:-4px 4px 14px;}
+  body.resting .wrap{padding-bottom:calc(env(safe-area-inset-bottom) + 96px);}
+  .rest-bar{
+    position:fixed;
+    left:50%;
+    transform:translateX(-50%);
+    bottom:calc(env(safe-area-inset-bottom) + 16px);
+    width:calc(100% - 32px);
+    max-width:448px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+    padding:10px 10px 10px 20px;
+    border-radius:999px;
+    background:var(--surface-3);
+    box-shadow:0 10px 30px rgba(0,0,0,0.55);
+    font-size:19px;
+    font-weight:600;
+    font-variant-numeric:tabular-nums;
+    z-index:20;
+  }
+  .rest-bar.done{background:var(--green); color:#062912;}
+  .rest-bar button{
+    border:none;
+    border-radius:999px;
+    padding:9px 16px;
+    background:rgba(255,255,255,0.16);
+    color:inherit;
+    font:inherit;
+    font-size:15px;
+    cursor:pointer;
+  }
   .banner{
     display:flex;
     justify-content:space-between;
@@ -822,6 +854,11 @@ const TG_INIT_DATA = new URLSearchParams(location.hash.slice(1)).get('tgWebAppDa
 let botName = '';
 let loginError = '';
 let loadError = '';
+let restCfg = null;        // настройки таймера отдыха
+let rest = null;           // идущий отсчёт: { endsAt, name, done }
+let restTicker = null;
+let restMsgId = 0;
+try { restMsgId = Number(localStorage.getItem('training-log:rest-msg')) || 0; } catch (e) {}
 let pendingSave = false;   // есть изменения, которые сервер ещё не принял
 let offline = false;       // последняя попытка достучаться до сервера не удалась
 let stats = null;
@@ -1195,6 +1232,7 @@ function writeCache(pending){
       overrides,
       profile,
       reminders,
+      rest: restCfg,
       draft: activeType && draft ? { type: activeType, exercises: draft } : null,
       pending: !!pending,
       at: Date.now()
@@ -1209,6 +1247,7 @@ function applyData(data){
   overrides = (data.overrides && typeof data.overrides === 'object') ? data.overrides : {};
   profile = (data.profile && typeof data.profile === 'object') ? data.profile : null;
   reminders = (data.reminders && typeof data.reminders === 'object') ? data.reminders : null;
+  restCfg = (data.rest && typeof data.rest === 'object') ? data.rest : DEFAULT_REST();
   program = profile ? buildProgram(profile) : DEFAULT_PROGRAM;
   const saved = data.draft;
   if (saved && program[saved.type] && Array.isArray(saved.exercises)){
@@ -1233,6 +1272,7 @@ function mergeData(local, remote){
     overrides: local.overrides,
     profile: local.profile || remote.profile,
     reminders: local.reminders || remote.reminders,
+    rest: local.rest || remote.rest,
     draft: local.draft || remote.draft
   };
 }
@@ -1248,7 +1288,8 @@ async function loadAll(){
       overrides: (data.overrides && typeof data.overrides === 'object') ? data.overrides : {},
       profile: (data.profile && typeof data.profile === 'object') ? data.profile : null,
       draft: data.draft || null,
-      reminders: (data.reminders && typeof data.reminders === 'object') ? data.reminders : null
+      reminders: (data.reminders && typeof data.reminders === 'object') ? data.reminders : null,
+      rest: (data.rest && typeof data.rest === 'object') ? data.rest : null
     };
   }catch(e){
     console.error('Load error', e);
@@ -1285,6 +1326,7 @@ async function sendSave(){
         overrides,
         profile,
         reminders,
+        rest: restCfg,
         draft: activeType && draft ? { type: activeType, exercises: draft } : null
       })
     });
@@ -1349,6 +1391,89 @@ function remindersSummary(r){
   if (!r || !r.enabled || !r.days.length) return 'Напоминания выключены';
   const days = DAY_LABELS.filter(([, day]) => r.days.includes(day)).map(([label]) => label).join(', ');
   return `Напоминания: ${days} в ${r.time}`;
+}
+const REST_CHOICES = [60, 90, 120, 180];
+const DEFAULT_REST = () => ({ enabled: true, seconds: 90, notify: true });
+function restLeft(){
+  return rest ? Math.max(0, Math.round((rest.endsAt - Date.now()) / 1000)) : 0;
+}
+function restClock(sec){
+  return Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0');
+}
+// Отсчёт начинается сам, когда отмечаешь подход выполненным.
+function startRest(name){
+  if (!restCfg || !restCfg.enabled) return;
+  rest = { endsAt: Date.now() + restCfg.seconds * 1000, name: name || '', done: false };
+  clearInterval(restTicker);
+  restTicker = setInterval(tickRest, 500);
+}
+// Полосу обновляем напрямую: полная перерисовка сбросила бы фокус с полей,
+// в которые человек в этот момент вписывает вес.
+function tickRest(){
+  if (!rest) return;
+  const bar = document.getElementById('rest-bar');
+  const left = restLeft();
+  if (bar) bar.querySelector('.rest-left').textContent = left ? restClock(left) : 'Отдых окончен';
+  if (!left && !rest.done){
+    rest.done = true;
+    if (bar){
+      bar.classList.add('done');
+      bar.querySelector('button').textContent = 'Убрать';
+    }
+    haptic();
+    // Если вкладка «просыпается» спустя минуты, сообщение уже не нужно.
+    if (restCfg.notify && Date.now() - rest.endsAt < 60000) pingTelegram(rest.name);
+  }
+  if (rest.done && Date.now() - rest.endsAt > 5000) stopRest();
+}
+function stopRest(){
+  clearInterval(restTicker);
+  restTicker = null;
+  rest = null;
+  const bar = document.getElementById('rest-bar');
+  if (bar) bar.remove();
+  document.body.classList.remove('resting');
+}
+function skipRest(){
+  stopRest();
+}
+function haptic(){
+  try {
+    const tg = window.Telegram && window.Telegram.WebApp;
+    if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
+    else if (navigator.vibrate) navigator.vibrate([120, 60, 120]);
+  } catch (e) {}
+}
+async function pingTelegram(name){
+  try {
+    const res = await fetch('/api/rest', {
+      method: 'POST',
+      headers: apiHeaders(),
+      body: JSON.stringify({ prev: restMsgId, exercise: name })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (data.id){
+      restMsgId = data.id;
+      try { localStorage.setItem('training-log:rest-msg', String(data.id)); } catch (e) {}
+    }
+  } catch (e) {}
+}
+function toggleRest(){
+  if (!restCfg) restCfg = DEFAULT_REST();
+  restCfg.enabled = !restCfg.enabled;
+  if (!restCfg.enabled) stopRest();
+  render();
+  saveAll();
+}
+function setRestSeconds(seconds){
+  restCfg.seconds = seconds;
+  render();
+  saveAll();
+}
+function toggleRestNotify(){
+  restCfg.notify = !restCfg.notify;
+  render();
+  saveAll();
 }
 function timezone(){
   try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'; } catch (e) { return 'UTC'; }
@@ -1588,6 +1713,7 @@ function resumeWorkout(){
   render();
 }
 async function cancelWorkout(){
+  stopRest();
   activeType = null; draft = null; view = 'today'; render();
   await saveAll();
 }
@@ -1601,6 +1727,7 @@ async function finishWorkout(){
       sets: ex.sets.map(s => ({ value1: s.value1 || '0', value2: s.value2 || '0', done: s.done }))
     }))
   };
+  stopRest();
   sessions = sessions.filter(s => s.date !== entry.date);
   sessions.push(entry);
   sessions.sort((a,b) => a.date.localeCompare(b.date));
@@ -1614,7 +1741,9 @@ function setVal(exIdx, setIdx, field, value){
   scheduleSave();
 }
 function toggleDone(exIdx, setIdx){
-  draft[exIdx].sets[setIdx].done = !draft[exIdx].sets[setIdx].done;
+  const set = draft[exIdx].sets[setIdx];
+  set.done = !set.done;
+  if (set.done) startRest(draft[exIdx].name);
   render();
   saveAll();
 }
@@ -1945,6 +2074,36 @@ function renderSettings(){
       ? 'Бот напишет в выбранные дни. Если вы уже потренировались в этот день, напоминание не придёт.'
       : 'Бот будет напоминать о тренировке в выбранные дни и время.'}</p>
   `;
+  const restOn = !!(restCfg && restCfg.enabled);
+  const restGroup = `
+    <p class="section-title">Отдых между подходами</p>
+    <div class="card list">
+      <button class="row" onclick="toggleRest()">
+        <span class="icon-sq" style="background:#30D158">${icon('clock')}</span>
+        <span class="row-body">
+          <span class="row-label">Таймер отдыха</span>
+          <span class="switch ${restOn ? 'on' : ''}"></span>
+        </span>
+      </button>
+      ${restOn ? `
+        <div class="days">
+          ${REST_CHOICES.map(sec => `
+            <button class="${restCfg.seconds === sec ? 'on' : ''}" onclick="setRestSeconds(${sec})">${sec} с</button>
+          `).join('')}
+        </div>
+        <button class="row" onclick="toggleRestNotify()">
+          <span class="icon-sq" style="background:#2AABEE">${icon('send')}</span>
+          <span class="row-body">
+            <span class="row-label">Сообщение в Telegram</span>
+            <span class="switch ${restCfg.notify ? 'on' : ''}"></span>
+          </span>
+        </button>
+      ` : ''}
+    </div>
+    <p class="lib-note">${restOn
+      ? 'Отсчёт начинается сам, когда отмечаете подход выполненным. Кнопка «Пропустить» обрывает его.'
+      : 'Отсчёт между подходами не показывается.'}</p>
+  `;
   const statsGroup = stats ? `
     <p class="section-title">Статистика</p>
     <div class="card list">
@@ -2007,6 +2166,7 @@ function renderSettings(){
   ` : '';
   return `
     ${remindersGroup}
+    ${restGroup}
     ${statsGroup}
     ${broadcastGroup}
     ${accountGroup}
@@ -2245,7 +2405,14 @@ function render(){
       <button onclick="init()">Обновить</button>
     </div>
   ` : '';
-  app.innerHTML = renderHeader() + (bare ? '' : renderTabBar(activeTab)) + banner + body;
+  const restBar = rest ? `
+    <div class="rest-bar${rest.done ? ' done' : ''}" id="rest-bar">
+      <span class="rest-left">${rest.done ? 'Отдых окончен' : restClock(restLeft())}</span>
+      <button onclick="skipRest()">${rest.done ? 'Убрать' : 'Пропустить'}</button>
+    </div>
+  ` : '';
+  app.innerHTML = renderHeader() + (bare ? '' : renderTabBar(activeTab)) + banner + body + restBar;
+  document.body.classList.toggle('resting', !!rest);
 }
 
 async function init(){

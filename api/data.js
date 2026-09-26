@@ -22,13 +22,21 @@ function reminders(r){
   };
 }
 
+function rest(r){
+  if (!r || typeof r !== 'object') return null;
+  const seconds = Math.round(Number(r.seconds) / 15) * 15;
+  if (!(seconds >= 30 && seconds <= 600)) return null;
+  return { enabled: !!r.enabled, seconds, notify: !!r.notify };
+}
+
 function normalize(d){
   return {
     sessions: Array.isArray(d.sessions) ? d.sessions : [],
     overrides: (d.overrides && typeof d.overrides === 'object') ? d.overrides : {},
     profile: (d.profile && typeof d.profile === 'object') ? d.profile : null,
     draft: d.draft || null,
-    reminders: reminders(d.reminders)
+    reminders: reminders(d.reminders),
+    rest: rest(d.rest)
   };
 }
 
