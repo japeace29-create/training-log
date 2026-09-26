@@ -796,7 +796,8 @@ const QUIZ = [
   { id: 'medical', title: 'Врач ограничивал вам физические нагрузки?', subtitle: 'Например, из-за болезней сердца, давления, недавней операции или беременности', options: [
     ['yes', 'Да, есть ограничения'],
     ['no', 'Нет']
-  ]}
+  ]},
+  { id: 'reminders' }
 ];
 
 let sessions = [];
@@ -1070,7 +1071,8 @@ function startQuiz(){
     step: 0,
     error: '',
     returnTo: view,
-    answers: profile ? { ...profile, limits: [...profile.limits] } : { limits: [] }
+    answers: profile ? { ...profile, limits: [...profile.limits] } : { limits: [] },
+    reminders: reminders ? { ...reminders, days: [...reminders.days] } : DEFAULT_REMINDERS()
   };
   view = 'quiz';
   render();
@@ -1109,6 +1111,25 @@ function quizChoose(i){
   else list.push(value);
   render();
 }
+function quizToggleReminders(){
+  const r = quiz.reminders;
+  r.enabled = !r.enabled;
+  if (r.enabled && !r.days.length) r.days = [1, 3, 5];
+  render();
+}
+function quizToggleReminderDay(day){
+  const days = quiz.reminders.days;
+  const i = days.indexOf(day);
+  if (i >= 0) days.splice(i, 1);
+  else days.push(day);
+  days.sort();
+  render();
+}
+function quizReminderTime(value){
+  if (!/^\d{2}:\d{2}$/.test(value)) return;
+  quiz.reminders.time = value;
+  render();
+}
 function quizNext(){
   const a = quiz.answers;
   if (QUIZ[quiz.step].id === 'body'){
@@ -1125,6 +1146,7 @@ async function saveProfile(){
   profile = { ...quiz.answers, date: todayStr() };
   program = buildProgram(profile);
   overrides = {};
+  reminders = { ...quiz.reminders, tz: timezone() };
   quiz = null;
   view = 'today';
   render();
@@ -1216,11 +1238,46 @@ function scheduleSave(){
   clearTimeout(saveTimer);
   saveTimer = setTimeout(saveAll, 600);
 }
+const DAY_LABELS = [['Пн', 1], ['Вт', 2], ['Ср', 3], ['Чт', 4], ['Пт', 5], ['Сб', 6], ['Вс', 0]];
+const DEFAULT_REMINDERS = () => ({ enabled: true, days: [1, 3, 5], time: '18:00', tz: timezone() });
+// Одна и та же карточка нужна и в тесте, и в настройках.
+function reminderCard(r, handlers){
+  const on = !!(r && r.enabled);
+  return `
+    <div class="card list">
+      <button class="row" onclick="${handlers.toggle}">
+        <span class="icon-sq" style="background:#FF9230">${icon('clock')}</span>
+        <span class="row-body">
+          <span class="row-label">Напоминать в Telegram</span>
+          <span class="switch ${on ? 'on' : ''}"></span>
+        </span>
+      </button>
+      ${on ? `
+        <div class="days">
+          ${DAY_LABELS.map(([label, day]) => `
+            <button class="${r.days.includes(day) ? 'on' : ''}" onclick="${handlers.day(day)}">${label}</button>
+          `).join('')}
+        </div>
+        <label class="row">
+          <span class="row-body">
+            <span class="row-label">Время</span>
+            <input type="time" value="${r.time}" onchange="${handlers.time}">
+          </span>
+        </label>
+      ` : ''}
+    </div>
+  `;
+}
+function remindersSummary(r){
+  if (!r || !r.enabled || !r.days.length) return 'Напоминания выключены';
+  const days = DAY_LABELS.filter(([, day]) => r.days.includes(day)).map(([label]) => label).join(', ');
+  return `Напоминания: ${days} в ${r.time}`;
+}
 function timezone(){
   try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'; } catch (e) { return 'UTC'; }
 }
 function toggleReminders(){
-  if (!reminders) reminders = { enabled: false, days: [1, 3, 5], time: '18:00', tz: timezone() };
+  if (!reminders) reminders = { ...DEFAULT_REMINDERS(), enabled: false };
   reminders.enabled = !reminders.enabled;
   reminders.tz = timezone();
   if (reminders.enabled && !reminders.days.length) reminders.days = [1, 3, 5];
@@ -1799,31 +1856,13 @@ function renderSettings(){
     <p class="lib-note">Тест не пройден — сейчас стандартная программа.</p>
   `;
   const on = !!(reminders && reminders.enabled);
-  const dayLabels = [['Пн', 1], ['Вт', 2], ['Ср', 3], ['Чт', 4], ['Пт', 5], ['Сб', 6], ['Вс', 0]];
   const remindersGroup = `
     <p class="section-title" style="margin-top:4px;">Напоминания</p>
-    <div class="card list">
-      <button class="row" onclick="toggleReminders()">
-        <span class="icon-sq" style="background:#FF9230">${icon('clock')}</span>
-        <span class="row-body">
-          <span class="row-label">Напоминать в Telegram</span>
-          <span class="switch ${on ? 'on' : ''}"></span>
-        </span>
-      </button>
-      ${on ? `
-        <div class="days">
-          ${dayLabels.map(([label, day]) => `
-            <button class="${reminders.days.includes(day) ? 'on' : ''}" onclick="toggleReminderDay(${day})">${label}</button>
-          `).join('')}
-        </div>
-        <label class="row">
-          <span class="row-body">
-            <span class="row-label">Время</span>
-            <input type="time" value="${reminders.time}" onchange="setReminderTime(this.value)">
-          </span>
-        </label>
-      ` : ''}
-    </div>
+    ${reminderCard(reminders, {
+      toggle: 'toggleReminders()',
+      day: day => `toggleReminderDay(${day})`,
+      time: 'setReminderTime(this.value)'
+    })}
     <p class="lib-note">${on
       ? 'Бот напишет в выбранные дни. Если вы уже потренировались в этот день, напоминание не придёт.'
       : 'Бот будет напоминать о тренировке в выбранные дни и время.'}</p>
@@ -1986,6 +2025,19 @@ function renderQuiz(){
         `).join('')}
       </div>
     `;
+  } else if (step.id === 'reminders'){
+    body = `
+      <p class="quiz-title">Напоминать о тренировках?</p>
+      <p class="quiz-sub">Бот напишет в Telegram в выбранные дни. Это можно изменить в настройках в любой момент</p>
+      ${reminderCard(quiz.reminders, {
+        toggle: 'quizToggleReminders()',
+        day: day => `quizToggleReminderDay(${day})`,
+        time: 'quizReminderTime(this.value)'
+      })}
+      <p class="lib-note">${quiz.reminders.enabled
+        ? 'Если вы уже потренировались в этот день, напоминание не придёт.'
+        : 'Без напоминаний — вы сами решаете, когда тренироваться.'}</p>
+    `;
   } else {
     const options = step.multi ? [...step.options, [null, 'Нет, всё в порядке']] : step.options;
     const isOn = v => step.multi ? (v === null ? a.limits.length === 0 : a.limits.includes(v)) : a[step.id] === v;
@@ -2008,7 +2060,8 @@ function renderQuiz(){
     `;
   }
   const back = quiz.step > 0 ? `<button class="btn btn-outline" onclick="quizGo(-1)">Назад</button>` : '';
-  const next = (step.id === 'body' || step.multi) ? `<button class="btn btn-primary" onclick="quizNext()">Далее</button>` : '';
+  const next = (step.id === 'body' || step.id === 'reminders' || step.multi)
+    ? `<button class="btn btn-primary" onclick="quizNext()">Далее</button>` : '';
   return `
     <div class="quiz-top">
       <span class="quiz-step">Шаг ${quiz.step + 1} из ${QUIZ.length}</span>
@@ -2047,6 +2100,7 @@ function renderQuizResult(){
     </div>
     ${planGroup('A')}
     ${planGroup('B')}
+    <p class="lib-note" style="margin-top:14px;">${remindersSummary(quiz.reminders)}</p>
     ${resetNote}
     <div class="row-2">
       <button class="btn btn-outline" onclick="quizGo(-1)">Изменить ответы</button>
