@@ -1,0 +1,15 @@
+name: Напоминания о тренировках
+
+# Планировщик Vercel на бесплатном тарифе умеет запускать задачу только раз
+# в сутки, поэтому расписание живёт здесь. Сервер сам решает, кому уже пора.
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Проверить, кому пора напомнить
+        run: curl -fsS -X POST https://training-log-vert-psi.vercel.app/api/cron
