@@ -509,6 +509,30 @@
   .hist-actions{display:flex; gap:10px; margin:12px 0 4px;}
   .hist-actions .btn{flex:1; font-size:15px; padding:10px 14px;}
   .hist-actions .danger{color:var(--red);}
+  .note-input{
+    display:block;
+    width:100%;
+    margin-top:10px;
+    padding:9px 12px;
+    border:none;
+    border-radius:12px;
+    background:var(--surface-2);
+    color:var(--text);
+    font:inherit;
+    font-size:14px;
+    line-height:1.45;
+    resize:none;
+    overflow:hidden;
+  }
+  .note-input:focus{outline:none;}
+  .note-input::placeholder{color:var(--text-faint);}
+  .prev-note{
+    margin:-6px 0 8px;
+    font-size:13px;
+    color:var(--text-muted);
+  }
+  .hist-note{font-size:13px; color:var(--text-muted);}
+  .hist-note.top{margin:0 0 10px;}
   .record-line{
     margin:8px 0 0;
     font-size:13px;
@@ -1078,6 +1102,7 @@ let loadError = '';
 let swaps = {};            // выбранные вручную упражнения: { 'A:3': 'Отжимания' }
 let swapOpen = null;       // у какого слота открыт список замен
 let progressOpen = null;   // у какого упражнения раскрыт график
+let draftNote = '';        // заметка ко всей тренировке
 let draftDate = null;      // правим прошлую тренировку — её дата, иначе сегодня
 let deleteArmed = null;    // дата тренировки, удаление которой ждёт подтверждения
 let weights = [];          // история веса: [{ date, kg }]
@@ -1475,7 +1500,7 @@ function writeCache(pending){
       rest: restCfg,
       weights,
       swaps,
-      draft: activeType && draft ? { type: activeType, exercises: draft, date: draftDate } : null,
+      draft: activeType && draft ? { type: activeType, exercises: draft, date: draftDate, note: draftNote } : null,
       pending: !!pending,
       at: Date.now()
     }));
@@ -1502,11 +1527,13 @@ function applyData(data){
     activeType = saved.type;
     draft = saved.exercises;
     draftDate = saved.date || null;
+    draftNote = saved.note || '';
     view = 'workout';
   } else {
     activeType = null;
     draft = null;
     draftDate = null;
+    draftNote = '';
     // Бот умеет открыть приложение сразу на нужной вкладке.
     const wanted = new URLSearchParams(location.search).get('tab');
     view = TABS.some(t => t.id === wanted) ? wanted : 'today';
@@ -1592,7 +1619,7 @@ async function sendSave(){
         rest: restCfg,
         weights,
         swaps,
-        draft: activeType && draft ? { type: activeType, exercises: draft, date: draftDate } : null
+        draft: activeType && draft ? { type: activeType, exercises: draft, date: draftDate, note: draftNote } : null
       })
     });
     if (res.status === 401){
@@ -1834,6 +1861,25 @@ function exerciseSeries(name){
     });
   });
   return out;
+}
+// Последняя заметка к упражнению: в зале полезнее любой статистики —
+// «болело плечо», «скамья была занята, делал с гантелями».
+function lastNote(name, before){
+  for (let i = sessions.length - 1; i >= 0; i--){
+    const s = sessions[i];
+    if (before && s.date >= before) continue;
+    const ex = (s.exercises || []).find(e => e.name === name);
+    if (ex && ex.note) return { date: s.date, note: ex.note };
+  }
+  return null;
+}
+function setExerciseNote(exIdx, value){
+  draft[exIdx].note = value.slice(0, 200);
+  scheduleSave();
+}
+function setWorkoutNote(value){
+  draftNote = value.slice(0, 500);
+  scheduleSave();
 }
 function toggleExerciseChart(name){
   progressOpen = progressOpen === name ? null : name;
@@ -2207,6 +2253,7 @@ function draftExercise(ex, prev){
     target: targetText(cfg),
     isTime: !!ex.isTime,
     slot: ex.slot,
+    note: (prev && prev.note) || '',
     advice,
     sets: Array.from({length: cfg.sets}, (_, i) => ({
       value1: prev && prev.sets[i] ? prev.sets[i].value1 : (prev ? '' : suggested),
@@ -2250,6 +2297,7 @@ function swapList(type, slotIndex, current){
 function startWorkout(type, prefill){
   activeType = type;
   draftDate = null;
+  draftNote = (prefill && prefill.note) || '';
   draft = program[type].map(ex => {
     const prev = prefill && prefill.exercises.find(e => e.name === ex.name);
     return draftExercise(ex, prev);
@@ -2266,12 +2314,14 @@ function editSession(date){
   const inProgram = [...(program.A || []), ...(program.B || [])];
   activeType = entry.type;
   draftDate = date === todayStr() ? null : date;
+  draftNote = entry.note || '';
   draft = entry.exercises.map(ex => {
     const known = inProgram.find(e => e.name === ex.name);
     return {
       name: ex.name,
       target: known ? targetText(getConfig(known)) : '',
       isTime: !!ex.isTime,
+      note: ex.note || '',
       slot: known ? known.slot : null,
       advice: null,
       sets: ex.sets.map(set => ({ value1: set.value1 === '0' ? '' : set.value1, value2: set.value2 === '0' ? '' : set.value2, done: !!set.done }))
@@ -2306,7 +2356,7 @@ function resumeWorkout(){
 async function cancelWorkout(){
   stopRest();
   const edited = draftDate;
-  activeType = null; draft = null; draftDate = null;
+  activeType = null; draft = null; draftDate = null; draftNote = '';
   view = edited ? 'history' : 'today';
   render();
   await saveAll();
@@ -2315,9 +2365,11 @@ async function finishWorkout(){
   const entry = {
     date: draftDate || todayStr(),
     type: activeType,
+    note: draftNote.trim(),
     exercises: draft.map(ex => ({
       name: ex.name,
       isTime: ex.isTime,
+      note: (ex.note || '').trim(),
       sets: ex.sets.map(s => ({ value1: s.value1 || '0', value2: s.value2 || '0', done: s.done }))
     }))
   };
@@ -2326,7 +2378,7 @@ async function finishWorkout(){
   sessions.push(entry);
   sessions.sort((a,b) => a.date.localeCompare(b.date));
   const edited = draftDate;
-  activeType = null; draft = null; draftDate = null;
+  activeType = null; draft = null; draftDate = null; draftNote = '';
   view = edited ? 'history' : 'today';
   if (profile) program = buildProgram(profile);
   await saveAll();
@@ -2521,6 +2573,7 @@ function renderToday(){
 function renderWorkout(){
   const exercisesHtml = draft.map((ex, exIdx) => {
     const perf = lastPerformance(ex.name, todayStr());
+    const prevNote = lastNote(ex.name, draftDate || todayStr());
     const record = exerciseRecord(ex.name, todayStr());
     // Рекордным считаем только отмеченный подход: пока цифра не подтверждена,
     // это ещё не результат.
@@ -2572,9 +2625,12 @@ function renderWorkout(){
         </div>
         ${ex.slot != null ? swapList(activeType, ex.slot, ex.name) : ''}
         <p class="last-time">${hintText(perf)}</p>
+        ${prevNote ? `<p class="prev-note">💬 ${dayText(prevNote.date, true)}: ${escapeHtml(prevNote.note)}</p>` : ''}
         ${adviceHtml}
         ${setsHtml}
         ${bestNow ? `<p class="record-line">🏆 Новый рекорд: ${setLabel(ex.isTime, bestNow)} — было ${record.label}</p>` : ''}
+        <textarea class="note-input autogrow" rows="1" maxlength="200" placeholder="Заметка к упражнению"
+          oninput="setExerciseNote(${exIdx}, this.value); autoGrow(this)">${escapeHtml(ex.note || '')}</textarea>
       </div>
     `;
   }).join('');
@@ -2583,6 +2639,11 @@ function renderWorkout(){
     <div class="card">
       <p class="eyebrow">${TYPE_LABELS[activeType]}${draftDate ? ' · ' + dayText(draftDate) : ''}</p>
       ${exercisesHtml}
+    </div>
+    <div class="card">
+      <p class="eyebrow">Как прошла тренировка</p>
+      <textarea class="note-input autogrow" rows="2" maxlength="500" placeholder="Самочувствие, что мешало, что получилось"
+        oninput="setWorkoutNote(this.value); autoGrow(this)">${escapeHtml(draftNote)}</textarea>
     </div>
     <div class="row-2">
       <button class="btn btn-outline narrow" onclick="cancelWorkout()">Отмена</button>
@@ -2784,7 +2845,7 @@ function renderSettings(){
     <p class="section-title">Рассылка</p>
     <div class="card list">
       <div class="row bc-row">
-        <textarea class="bc-text" id="bc-input" rows="3" placeholder="Текст сообщения всем пользователям" oninput="editBroadcast(this.value)">${escapeHtml(broadcastText)}</textarea>
+        <textarea class="bc-text autogrow" id="bc-input" rows="3" placeholder="Текст сообщения всем пользователям" oninput="editBroadcast(this.value)">${escapeHtml(broadcastText)}</textarea>
       </div>
       <button class="row" onclick="toggleBroadcastPhoto()">
         <span class="icon-sq" style="background:#DB34F2">${icon('pin')}</span>
@@ -2854,7 +2915,8 @@ function renderHistory(){
       const sets = filledSets(ex);
       if (!sets.length) return '';
       const txt = sets.map(st => ex.isTime ? (st.value1 + 'сек') : (kgText(st.value1) + 'кг×' + st.value2)).join(', ');
-      return `<div class="hist-ex"><b>${ex.name}</b><br><span class="sets-txt">${txt}</span></div>`;
+      return `<div class="hist-ex"><b>${ex.name}</b><br><span class="sets-txt">${txt}</span>${
+        ex.note ? `<br><span class="hist-note">💬 ${escapeHtml(ex.note)}</span>` : ''}</div>`;
     }).join('') || '<div class="hist-ex"><span class="sets-txt">Ничего не записано</span></div>';
     return `
       <details class="hist-item">
@@ -2863,6 +2925,7 @@ function renderHistory(){
           <span class="row-value">Тип ${s.type}${icon('chevron')}</span>
         </summary>
         <div class="hist-body">
+          ${s.note ? `<p class="hist-note top">💬 ${escapeHtml(s.note)}</p>` : ''}
           ${exHtml}
           <div class="hist-actions">
             <button class="btn btn-outline" onclick="editSession('${s.date}')">Изменить</button>
@@ -3165,7 +3228,7 @@ function render(){
   ` : '';
   app.innerHTML = renderHeader() + (bare ? '' : renderTabBar(activeTab)) + banner + body + restBar;
   document.body.classList.toggle('resting', !!rest);
-  autoGrow(document.getElementById('bc-input'));
+  document.querySelectorAll('.autogrow').forEach(autoGrow);
 }
 
 async function init(){
