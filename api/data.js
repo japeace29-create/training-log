@@ -69,7 +69,8 @@ function normalize(d){
     reminders: reminders(d.reminders),
     rest: rest(d.rest),
     weights: weights(d.weights),
-    swaps: swaps(d.swaps)
+    swaps: swaps(d.swaps),
+    goal: [2, 3, 4, 5].includes(d.goal) ? d.goal : 3
   };
 }
 
