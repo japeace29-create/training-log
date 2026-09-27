@@ -33,6 +33,32 @@ function localNow(tz){
   };
 }
 
+// Опоздать на пару часов не страшно, а вот будить ночью нельзя.
+function inWindow(time, local){
+  const [hours, minutes] = String(time || '').split(':').map(Number);
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return false;
+  const due = hours * 60 + minutes;
+  return local.minutes >= due && local.minutes <= due + LATE_LIMIT_MINUTES;
+}
+
+// Что сегодня положено отправить этому человеку. Вынесено отдельно,
+// чтобы правила можно было проверить без похода в Telegram.
+function decide(data, local, remindedDate, weighedDate){
+  const out = { workout: false, weight: false };
+  const r = data && data.reminders;
+  if (!r) return out;
+
+  if (r.enabled && Array.isArray(r.days) && r.days.includes(local.weekday)
+      && inWindow(r.time, local) && remindedDate !== local.date){
+    out.workout = true;
+  }
+  if (Number.isInteger(r.weighDay) && r.weighDay === local.weekday
+      && inWindow(r.weighTime || '09:00', local) && weighedDate !== local.date){
+    out.weight = true;
+  }
+  return out;
+}
+
 function reminderText(data, local){
   const sessions = Array.isArray(data.sessions) ? data.sessions : [];
   const type = sessions.length % 2 === 0 ? 'A' : 'B';
@@ -45,6 +71,18 @@ function reminderText(data, local){
       : 'Перерыв больше недели — начните с меньшего веса.';
   }
   return `⏰ Пора на тренировку.\n\nСегодня <b>Тренировка ${type}</b>. ${tail}`;
+}
+
+function weightText(data, local){
+  const list = Array.isArray(data.weights) ? data.weights : [];
+  const last = list.length ? list[list.length - 1] : null;
+  let tail = 'Первая запись задаст точку отсчёта.';
+  if (last){
+    const days = Math.round((Date.parse(local.date) - Date.parse(last.date)) / 86400000);
+    const kg = String(last.kg).replace('.', ',');
+    tail = days <= 1 ? `Вчера было ${kg} кг.` : `Прошлый раз — ${days} дн. назад, ${kg} кг.`;
+  }
+  return `⚖️ Пора встать на весы.\n\n${tail} От веса тела считаются рекомендуемые веса в упражнениях.`;
 }
 
 module.exports = async (req, res) => {
@@ -61,47 +99,73 @@ module.exports = async (req, res) => {
       res.status(200).json({ checked: 0, sent: 0 });
       return;
     }
-    const [values, remindedRaw] = await Promise.all([
+    const [values, remindedRaw, weighedRaw] = await Promise.all([
       kvCommand(['MGET', ...ids.map(id => 'training-log:data:' + id)]),
-      kvCommand(['HGETALL', 'training-log:reminded'])
+      kvCommand(['HGETALL', 'training-log:reminded']),
+      kvCommand(['HGETALL', 'training-log:reminded-weight'])
     ]);
     const reminded = toMap(remindedRaw);
+    const weighed = toMap(weighedRaw);
     const site = siteUrl(req);
+    // Кнопка может открыть приложение сразу на нужной вкладке.
+    const button = (text, tab) => ({
+      inline_keyboard: [[{ text, web_app: { url: tab ? site + '?tab=' + tab : site } }]]
+    });
     let sent = 0;
+    let weightSent = 0;
 
     for (let i = 0; i < ids.length; i++) {
       const id = ids[i];
       let data;
       try { data = JSON.parse(values[i]); } catch (e) { continue; }
-      const r = data && data.reminders;
-      if (!r || !r.enabled || !Array.isArray(r.days) || !r.days.length || !r.time) continue;
+      if (!data || !data.reminders) continue;
 
-      const local = localNow(r.tz);
-      if (!r.days.includes(local.weekday)) continue;
-      const [hours, minutes] = String(r.time).split(':').map(Number);
-      const due = hours * 60 + minutes;
-      if (local.minutes < due || local.minutes > due + LATE_LIMIT_MINUTES) continue;
-      if (reminded[id] === local.date) continue;
+      const local = localNow(data.reminders.tz);
+      const todo = decide(data, local, reminded[id], weighed[id]);
 
-      await kvCommand(['HSET', 'training-log:reminded', id, local.date]);
-      const sessions = Array.isArray(data.sessions) ? data.sessions : [];
-      if (sessions.some(s => s.date === local.date)) continue;
+      if (todo.workout) {
+        // Отметку ставим до отправки: упавший запрос не должен повторяться весь день.
+        await kvCommand(['HSET', 'training-log:reminded', id, local.date]);
+        const sessions = Array.isArray(data.sessions) ? data.sessions : [];
+        if (!sessions.some(s => s.date === local.date)) {
+          try {
+            await botRequest('sendMessage', {
+              chat_id: id,
+              parse_mode: 'HTML',
+              text: reminderText(data, local),
+              reply_markup: button('Открыть дневник')
+            });
+            sent++;
+          } catch (e) {
+            console.error('Reminder failed for ' + id, e.message);
+          }
+        }
+      }
 
-      try {
-        await botRequest('sendMessage', {
-          chat_id: id,
-          parse_mode: 'HTML',
-          text: reminderText(data, local),
-          reply_markup: { inline_keyboard: [[{ text: 'Открыть дневник', web_app: { url: site } }]] }
-        });
-        sent++;
-      } catch (e) {
-        console.error('Reminder failed for ' + id, e.message);
+      if (todo.weight) {
+        await kvCommand(['HSET', 'training-log:reminded-weight', id, local.date]);
+        const list = Array.isArray(data.weights) ? data.weights : [];
+        if (!list.some(w => w.date === local.date)) {
+          try {
+            await botRequest('sendMessage', {
+              chat_id: id,
+              parse_mode: 'HTML',
+              text: weightText(data, local),
+              reply_markup: button('Записать вес', 'progress')
+            });
+            weightSent++;
+          } catch (e) {
+            console.error('Weight reminder failed for ' + id, e.message);
+          }
+        }
       }
     }
 
-    res.status(200).json({ checked: ids.length, sent });
+    res.status(200).json({ checked: ids.length, sent, weight: weightSent });
   } catch (e) {
     res.status(500).json({ error: String(e && e.message || e) });
   }
 };
+
+module.exports.decide = decide;
+module.exports.localNow = localNow;
