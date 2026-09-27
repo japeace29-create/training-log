@@ -60,6 +60,32 @@ function swaps(v){
   return out;
 }
 
+// Свои упражнения: название, день, как записывать и какие мышцы.
+const GROUPS = ['Ноги', 'Спина', 'Грудь', 'Плечи', 'Руки', 'Пресс'];
+function customList(list){
+  if (!Array.isArray(list)) return [];
+  const out = [];
+  const ids = new Set();
+  for (const item of list){
+    if (!item || typeof item !== 'object') continue;
+    const name = String(item.name || '').trim().slice(0, 40);
+    if (!name || !['A', 'B', 'C'].includes(item.type)) continue;
+    // Одинаковые id убрали бы сразу оба упражнения, поэтому выдаём новый.
+    let id = String(item.id || '').slice(0, 24);
+    if (!id || ids.has(id)) id = 'c' + out.length + Date.now().toString(36);
+    ids.add(id);
+    out.push({
+      id,
+      name,
+      type: item.type,
+      isTime: !!item.isTime,
+      group: GROUPS.includes(item.group) ? item.group : GROUPS[0]
+    });
+    if (out.length >= 20) break;
+  }
+  return out;
+}
+
 // Суперсеты: ключ вида "A:1" — упражнение идёт в паре со следующим.
 function pairs(v){
   if (!v || typeof v !== 'object') return {};
@@ -82,6 +108,7 @@ function normalize(d){
     swaps: swaps(d.swaps),
     goal: [2, 3, 4, 5].includes(d.goal) ? d.goal : 3,
     split: d.split === 3 ? 3 : 2,
+    custom: customList(d.custom),
     // null — приёмы решает опыт, true/false — человек выбрал сам.
     advanced: typeof d.advanced === 'boolean' ? d.advanced : null,
     pairs: pairs(d.pairs)
