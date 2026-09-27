@@ -20,7 +20,8 @@ function toCsv(data){
   const rows = [HEADER.join(SEP)];
   (data.sessions || []).forEach(session => {
     (session.exercises || []).forEach(ex => {
-      (ex.sets || []).forEach((set, i) => {
+      let working = 0;
+      (ex.sets || []).forEach(set => {
         const reps = Number(set.value2) || 0;
         const weight = Number(set.value1) || 0;
         if (!ex.isTime && !reps) return;
@@ -29,7 +30,7 @@ function toCsv(data){
           session.date,
           session.type,
           ex.name,
-          i + 1,
+          set.warmup ? 'разминка' : set.drop ? 'дропсет' : ++working,
           ex.isTime ? '' : num(weight),
           ex.isTime ? '' : reps,
           ex.isTime ? weight : '',

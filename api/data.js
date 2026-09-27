@@ -60,6 +60,16 @@ function swaps(v){
   return out;
 }
 
+// Суперсеты: ключ вида "A:1" — упражнение идёт в паре со следующим.
+function pairs(v){
+  if (!v || typeof v !== 'object') return {};
+  const out = {};
+  for (const key of Object.keys(v)){
+    if (/^[ABC]:\d{1,2}$/.test(key) && v[key]) out[key] = true;
+  }
+  return out;
+}
+
 function normalize(d){
   return {
     sessions: Array.isArray(d.sessions) ? d.sessions : [],
@@ -71,7 +81,10 @@ function normalize(d){
     weights: weights(d.weights),
     swaps: swaps(d.swaps),
     goal: [2, 3, 4, 5].includes(d.goal) ? d.goal : 3,
-    split: d.split === 3 ? 3 : 2
+    split: d.split === 3 ? 3 : 2,
+    // null — приёмы решает опыт, true/false — человек выбрал сам.
+    advanced: typeof d.advanced === 'boolean' ? d.advanced : null,
+    pairs: pairs(d.pairs)
   };
 }
 
