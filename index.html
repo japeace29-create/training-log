@@ -584,6 +584,11 @@
   }
   .set-row .set-label.warm{color:var(--orange); font-weight:700;}
   .set-row.warmup input{background:transparent; box-shadow:inset 0 0 0 1px var(--separator);}
+  .plates{
+    margin:-2px 0 8px 30px;
+    font-size:12px;
+    color:var(--text-muted);
+  }
   .add-warmup{
     margin:2px 0 0;
     padding:4px 0;
@@ -1179,6 +1184,10 @@ let botName = '';
 let loginError = '';
 let loadError = '';
 let split = 2;             // два дня (A/B) или три (A/B/C)
+// Вес грифа у каждого зала свой, поэтому храним на устройстве.
+let barWeight = (() => {
+  try { return Number(localStorage.getItem('bar')) || 20; } catch (e) { return 20; }
+})();
 let weekGoal = 3;          // сколько тренировок в неделю хотим
 let swaps = {};            // выбранные вручную упражнения: { 'A:3': 'Отжимания' }
 let swapOpen = null;       // у какого слота открыт список замен
@@ -2600,6 +2609,32 @@ async function finishWorkout(){
   await saveAll();
   render();
 }
+const BARS = [10, 15, 20];
+const PLATES = [25, 20, 15, 10, 5, 2.5, 1.25];
+// Что вешать на одну сторону: жадно, от тяжёлых блинов к лёгким.
+function platesFor(total){
+  let perSide = (total - barWeight) / 2;
+  if (perSide < 0) return null;
+  const used = [];
+  PLATES.forEach(plate => {
+    while (perSide >= plate - 0.001){
+      used.push(plate);
+      perSide -= plate;
+    }
+  });
+  const exact = perSide < 0.001;
+  if (!used.length) return { text: 'только гриф', exact, real: barWeight };
+  return {
+    text: used.map(kg).join(' + '),
+    exact,
+    real: barWeight + used.reduce((sum, p) => sum + p, 0) * 2
+  };
+}
+function setBar(value){
+  barWeight = value;
+  try { localStorage.setItem('bar', String(value)); } catch (e) {}
+  render();
+}
 function toggleWarmup(exIdx, setIdx){
   const sets = draft[exIdx].sets;
   const set = sets[setIdx];
@@ -2834,6 +2869,17 @@ function renderWorkout(){
       </p>
     `;
     let working = 0;
+    let shownWeight = null;
+    const barbell = LOADS[ex.name] && LOADS[ex.name].eq === 'barbell';
+    const platesLine = value => {
+      // Показываем раскладку один раз на каждый новый вес в упражнении.
+      if (!barbell || !value || value === shownWeight) return '';
+      shownWeight = value;
+      const plates = platesFor(Number(value));
+      if (!plates) return '';
+      return `<p class="plates">${kg(value)} кг — на сторону ${plates.text}${
+        plates.exact ? '' : ' (выйдет ' + kg(plates.real) + ')'}</p>`;
+    };
     const setsHtml = ex.sets.map((s, setIdx) => {
       // Разминка не нумеруется: рабочие подходы считаются отдельно.
       const label = s.warmup ? 'Р' : String(++working);
@@ -2859,6 +2905,7 @@ function renderWorkout(){
             oninput="setVal(${exIdx},${setIdx},'value2',this.value)">
           <button class="done-toggle ${s.done?'on':''}" onclick="toggleDone(${exIdx},${setIdx})">${s.done?'✓':''}</button>
         </div>
+        ${platesLine(s.value1)}
       `;
     }).join('');
     return `
@@ -3016,6 +3063,17 @@ function renderSettings(){
     <p class="lib-note">${split === 3
       ? 'Три разных тренировки по кругу: A, B, C. Подходит, если ходите три раза в неделю.'
       : 'Две тренировки по очереди: A, B. Классика для двух-трёх занятий в неделю.'}</p>
+  `;
+  const barGroup = `
+    <p class="section-title">Гриф</p>
+    <div class="card list">
+      <div class="days">
+        ${BARS.map(n => `
+          <button class="${barWeight === n ? 'on' : ''}" onclick="setBar(${n})">${n} кг</button>
+        `).join('')}
+      </div>
+    </div>
+    <p class="lib-note">Сколько весит гриф в вашем зале. По нему считается, какие блины вешать на сторону.</p>
   `;
   const goalGroup = `
     <p class="section-title">Цель на неделю</p>
@@ -3185,6 +3243,7 @@ function renderSettings(){
   return `
     ${themeGroup}
     ${splitGroup}
+    ${barGroup}
     ${goalGroup}
     ${remindersGroup}
     ${restGroup}
