@@ -11,6 +11,14 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Дневник">
 <link rel="apple-touch-icon" href="icon.svg">
+<script>
+  // Ставим тему до стилей: иначе на секунду мелькнёт чужой фон.
+  try {
+    var pref = localStorage.getItem('theme') || 'auto';
+    var light = pref === 'light' || (pref === 'auto' && matchMedia('(prefers-color-scheme: light)').matches);
+    document.documentElement.dataset.theme = light ? 'light' : 'dark';
+  } catch (e) {}
+</script>
 <style>
   :root{
     --bg:#000000;
@@ -30,6 +38,97 @@
     --radius-s:10px;
     --font:-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
     --font-display:-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    color-scheme:dark;
+  }
+  /* Светлая тема сделана по мотивам «Здоровья» в iOS 27: белые карточки
+     без рамок, мягкие тени и живой цветной фон, который медленно дышит. */
+  :root[data-theme="light"]{
+    --bg:#F4F4F7;
+    --surface:#FFFFFF;
+    --surface-2:#F0F0F4;
+    --surface-3:#E4E4EA;
+    --separator:rgba(60,60,67,0.15);
+    --text:#000000;
+    --text-muted:#6E6E73;
+    --text-faint:#A6A6AB;
+    --accent:#007AFF;
+    --green:#2FB457;
+    --green-tint:#E8F7EC;
+    --red:#FF3B30;
+    --orange:#F08A00;
+    color-scheme:light;
+  }
+  :root[data-theme="light"] .card{
+    box-shadow:0 1px 2px rgba(0,0,0,0.05), 0 12px 28px rgba(0,0,0,0.05);
+  }
+  :root[data-theme="light"] .tabbar{
+    background:rgba(255,255,255,0.7);
+    -webkit-backdrop-filter:saturate(180%) blur(20px);
+    backdrop-filter:saturate(180%) blur(20px);
+    box-shadow:0 1px 2px rgba(0,0,0,0.05), 0 10px 24px rgba(0,0,0,0.06);
+  }
+  :root[data-theme="light"] .tabbar button.active{
+    background:#FFFFFF;
+    box-shadow:0 1px 3px rgba(0,0,0,0.14);
+  }
+  :root[data-theme="light"] .set-row .done-toggle{border-color:rgba(60,60,67,0.28); color:var(--text);}
+  :root[data-theme="light"] .banner{background:#FFF1DC; color:#8A5200;}
+  :root[data-theme="light"] .rest-bar{
+    background:rgba(255,255,255,0.86);
+    -webkit-backdrop-filter:saturate(180%) blur(20px);
+    backdrop-filter:saturate(180%) blur(20px);
+    box-shadow:0 10px 30px rgba(0,0,0,0.16);
+  }
+  :root[data-theme="light"] .rest-bar button{background:rgba(0,0,0,0.06);}
+  :root[data-theme="light"] .rest-bar.done{color:#053D17;}
+  :root[data-theme="light"] .day-sq.done{color:#FFFFFF;}
+  /* Фон: три мягких пятна, которые очень медленно плавают. */
+  .aurora{
+    position:fixed;
+    inset:0;
+    z-index:-1;
+    overflow:hidden;
+    pointer-events:none;
+    opacity:0;
+  }
+  :root[data-theme="light"] .aurora{opacity:1;}
+  .aurora span{
+    position:absolute;
+    width:80vmax;
+    height:80vmax;
+    border-radius:50%;
+    filter:blur(60px);
+    will-change:transform;
+  }
+  .aurora span:nth-child(1){
+    top:-34vmax; left:-26vmax;
+    background:radial-gradient(circle, rgba(255,105,150,0.36) 0%, rgba(255,105,150,0) 68%);
+    animation:drift-a 36s ease-in-out infinite;
+  }
+  .aurora span:nth-child(2){
+    top:-8vmax; right:-34vmax;
+    background:radial-gradient(circle, rgba(90,160,255,0.34) 0%, rgba(90,160,255,0) 68%);
+    animation:drift-b 44s ease-in-out infinite;
+  }
+  .aurora span:nth-child(3){
+    bottom:-40vmax; left:-4vmax;
+    background:radial-gradient(circle, rgba(70,220,180,0.3) 0%, rgba(70,220,180,0) 68%);
+    animation:drift-c 40s ease-in-out infinite;
+  }
+  @keyframes drift-a{
+    0%,100%{transform:translate3d(0,0,0) scale(1);}
+    50%{transform:translate3d(12vmax,9vmax,0) scale(1.18);}
+  }
+  @keyframes drift-b{
+    0%,100%{transform:translate3d(0,0,0) scale(1.1);}
+    50%{transform:translate3d(-10vmax,14vmax,0) scale(0.92);}
+  }
+  @keyframes drift-c{
+    0%,100%{transform:translate3d(0,0,0) scale(1);}
+    50%{transform:translate3d(8vmax,-12vmax,0) scale(1.2);}
+  }
+  @media (prefers-reduced-motion: reduce){
+    .aurora span{animation:none;}
   }
   *{box-sizing:border-box;}
   html,body{margin:0;padding:0;}
@@ -156,7 +255,6 @@
   .row input:focus{outline:none;}
   .row input[type="time"]{
     flex:0 0 auto;
-    color-scheme:dark;
     cursor:pointer;
   }
   .switch{
@@ -620,6 +718,7 @@
 </style>
 </head>
 <body>
+<div class="aurora" aria-hidden="true"><span></span><span></span><span></span></div>
 <div class="wrap" id="app"></div>
 
 <script>
@@ -1821,6 +1920,36 @@ function logout(){
   loginError = '';
   showLogin();
 }
+const THEME_CHOICES = [['Авто', 'auto'], ['Светлая', 'light'], ['Тёмная', 'dark']];
+function themePref(){
+  try { return localStorage.getItem('theme') || 'auto'; } catch (e) { return 'auto'; }
+}
+function systemLight(){
+  try { return matchMedia('(prefers-color-scheme: light)').matches; } catch (e) { return false; }
+}
+function applyTheme(){
+  const pref = themePref();
+  const resolved = pref === 'auto' ? (systemLight() ? 'light' : 'dark') : pref;
+  document.documentElement.dataset.theme = resolved;
+  const color = resolved === 'light' ? '#F4F4F7' : '#000000';
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute('content', color);
+  // Шапка самого Telegram тоже должна совпадать с приложением.
+  const tg = window.Telegram && window.Telegram.WebApp;
+  if (tg && tg.isVersionAtLeast && tg.isVersionAtLeast('6.1')){
+    try { tg.setHeaderColor(color); tg.setBackgroundColor(color); } catch (e) {}
+  }
+}
+function setTheme(pref){
+  try { localStorage.setItem('theme', pref); } catch (e) {}
+  applyTheme();
+  render();
+}
+try {
+  matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => {
+    if (themePref() === 'auto') applyTheme();
+  });
+} catch (e) {}
 function setupTelegram(){
   if (!TG_INIT_DATA) return;
   const script = document.createElement('script');
@@ -1830,10 +1959,7 @@ function setupTelegram(){
     if (!tg) return;
     tg.ready();
     tg.expand();
-    if (tg.isVersionAtLeast('6.1')){
-      tg.setHeaderColor('#000000');
-      tg.setBackgroundColor('#000000');
-    }
+    applyTheme();
     if (tg.isVersionAtLeast('7.7')) tg.disableVerticalSwipes();
   };
   document.head.appendChild(script);
@@ -2244,10 +2370,22 @@ function renderSettings(){
     </div>
     <p class="lib-note">Тест не пройден — сейчас стандартная программа.</p>
   `;
+  const pref = themePref();
+  const themeGroup = `
+    <p class="section-title" style="margin-top:4px;">Оформление</p>
+    <div class="card list">
+      <div class="days">
+        ${THEME_CHOICES.map(([label, value]) => `
+          <button class="${pref === value ? 'on' : ''}" onclick="setTheme('${value}')">${label}</button>
+        `).join('')}
+      </div>
+    </div>
+    <p class="lib-note">${pref === 'auto' ? 'Как в системе телефона.' : pref === 'light' ? 'Светлая тема — всегда.' : 'Тёмная тема — всегда.'}</p>
+  `;
   const on = !!(reminders && reminders.enabled);
   const weighOn = !!(reminders && Number.isInteger(reminders.weighDay));
   const remindersGroup = `
-    <p class="section-title" style="margin-top:4px;">Напоминания</p>
+    <p class="section-title">Напоминания</p>
     ${reminderCard(reminders, {
       toggle: 'toggleReminders()',
       day: day => `toggleReminderDay(${day})`,
@@ -2373,6 +2511,7 @@ function renderSettings(){
     </div>
   ` : '';
   return `
+    ${themeGroup}
     ${remindersGroup}
     ${restGroup}
     ${statsGroup}
