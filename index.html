@@ -1096,6 +1096,16 @@ try {
 } catch (e) {}
 // Telegram passes signed user data to a Mini App in the URL fragment.
 const TG_INIT_DATA = new URLSearchParams(location.hash.slice(1)).get('tgWebAppData');
+// Ссылка из бота для обычного браузера: ключ входа приходит в адресе.
+const LOGIN_TOKEN = new URLSearchParams(location.search).get('login');
+function stripLoginParam(){
+  try {
+    const url = new URL(location.href);
+    if (!url.searchParams.has('login')) return;
+    url.searchParams.delete('login');
+    history.replaceState(null, '', url.pathname + url.search + url.hash);
+  } catch (e) {}
+}
 let botName = '';
 let loginError = '';
 let loadError = '';
@@ -3339,6 +3349,10 @@ async function init(){
   if (TG_INIT_DATA){
     try { storeSession(await authRequest({ initData: TG_INIT_DATA })); }
     catch (e) { loginError = e.message; }
+  } else if (LOGIN_TOKEN){
+    try { storeSession(await authRequest({ link: LOGIN_TOKEN })); }
+    catch (e) { loginError = e.message; }
+    stripLoginParam();   // ключ не должен оставаться в адресной строке
   }
   if (!session){
     showLogin();

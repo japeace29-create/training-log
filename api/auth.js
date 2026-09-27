@@ -13,6 +13,22 @@ async function userFromCode(req, code) {
   return raw ? { user: JSON.parse(raw) } : { error: 'Код неверный или устарел — напишите боту ещё раз', status: 401 };
 }
 
+// Вход по ссылке из бота: ключ живёт 10 минут и выдерживает пару открытий
+// (встроенный браузер Telegram, потом Safari), но не больше трёх.
+async function userFromLink(req, token) {
+  if (!/^[a-f0-9]{32}$/.test(token)) return { error: 'Ссылка неверная', status: 401 };
+  const key = 'training-log:link:' + token;
+  const raw = await kvCommand(['GET', key]);
+  if (!raw) return { error: 'Ссылка устарела — напишите боту ещё раз', status: 401 };
+  const uses = await kvCommand(['INCR', key + ':uses']);
+  if (uses === 1) await kvCommand(['EXPIRE', key + ':uses', 600]);
+  if (uses > 3) {
+    await kvCommand(['DEL', key]);
+    return { error: 'Ссылка уже использована — напишите боту ещё раз', status: 401 };
+  }
+  return { user: JSON.parse(raw) };
+}
+
 module.exports = async (req, res) => {
   try {
     if (req.method === 'GET') {
@@ -31,6 +47,8 @@ module.exports = async (req, res) => {
       result = user ? { user } : { error: 'Не удалось проверить вход через Telegram', status: 401 };
     } else if (typeof body.code === 'string') {
       result = await userFromCode(req, body.code);
+    } else if (typeof body.link === 'string') {
+      result = await userFromLink(req, body.link);
     } else {
       result = { error: 'Нет данных для входа', status: 400 };
     }

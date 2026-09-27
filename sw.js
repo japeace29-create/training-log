@@ -32,7 +32,8 @@ self.addEventListener('fetch', event => {
   event.respondWith(
     fetch(request)
       .then(response => {
-        if (response && response.ok) {
+        // Адрес с ключом входа в кэш не кладём: он одноразовый и у каждого свой.
+        if (response && response.ok && !url.searchParams.has('login')) {
           const copy = response.clone();
           caches.open(CACHE).then(cache => cache.put(request, copy)).catch(() => {});
         }
