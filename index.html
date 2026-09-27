@@ -607,11 +607,22 @@
   .progress-row{
     display:flex;
     justify-content:space-between;
+    align-items:flex-start;
     gap:12px;
+    width:100%;
     padding:13px 0;
     font-size:16px;
+    background:none;
+    border:none;
+    color:var(--text);
+    font-family:inherit;
+    text-align:left;
+    cursor:pointer;
   }
+  .progress-row.open .pname{color:var(--accent);}
+  .ex-chart{padding:2px 0 6px;}
   .progress-row .pval{
+    white-space:nowrap;
     color:var(--text-muted);
     font-variant-numeric:tabular-nums;
     text-align:right;
@@ -1050,6 +1061,7 @@ let loginError = '';
 let loadError = '';
 let swaps = {};            // выбранные вручную упражнения: { 'A:3': 'Отжимания' }
 let swapOpen = null;       // у какого слота открыт список замен
+let progressOpen = null;   // у какого упражнения раскрыт график
 let weights = [];          // история веса: [{ date, kg }]
 let weightError = '';
 let restCfg = null;        // настройки таймера отдыха
@@ -1675,53 +1687,106 @@ function weightStats(){
     sinceMonth: older.length > 0
   };
 }
-function pickWeight(i){
-  const w = weights[i];
-  const caption = document.getElementById('weight-caption');
-  if (w && caption) caption.textContent = dayText(w.date) + ' — ' + kgText(w.kg) + ' кг';
+// Данные открытых графиков: по ним подписи под графиком узнают, во что ткнули.
+const chartData = {};
+function pickPoint(id, i){
+  const chart = chartData[id];
+  const caption = document.getElementById('cap-' + id);
+  if (!chart || !caption || !chart.points[i]) return;
+  const point = chart.points[i];
+  caption.textContent = dayText(point.date) + ' — ' + chart.format(point.value);
 }
-// Линия веса по времени: одна серия, поэтому без легенды — заголовок её называет.
-function weightChart(){
-  if (weights.length < 3) return '';
+// Одна серия по времени: без легенды — её называет заголовок карточки.
+// Один и тот же график рисует и вес тела, и объём, и рабочий вес упражнения.
+function lineChart(id, series, format, markBest){
+  if (series.length < 3) return '';
+  chartData[id] = { points: series, format };
   const L = 8, R = 266, T = 12, B = 92;   // справа оставлено место под подписи
-  const times = weights.map(w => Date.parse(w.date));
+  const times = series.map(p => Date.parse(p.date));
   const span = Math.max(1, times[times.length - 1] - times[0]);
-  const values = weights.map(w => w.kg);
+  const values = series.map(p => p.value);
   const lowest = Math.min(...values);
   const highest = Math.max(...values);
   let min = lowest;
   let max = highest;
-  if (max - min < 2){ const mid = (min + max) / 2; min = mid - 1; max = mid + 1; }
-  else { const pad = (max - min) * 0.18; min -= pad; max += pad; }
+  const room = Math.max((max - min) * 0.18, Math.abs(max) * 0.02, 1);
+  if (max - min < room){ const mid = (min + max) / 2; min = mid - room; max = mid + room; }
+  else { min -= room; max += room; }
   const x = i => L + (times[i] - times[0]) / span * (R - L);
   const y = v => B - (v - min) / (max - min) * (B - T);
-  const points = weights.map((w, i) => [x(i), y(w.kg)]);
-  const line = points.map((p, i) => (i ? 'L' : 'M') + p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join(' ');
-  const last = points[points.length - 1];
+  const pts = series.map((p, i) => [x(i), y(p.value)]);
+  const line = pts.map((p, i) => (i ? 'L' : 'M') + p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join(' ');
+  const last = pts[pts.length - 1];
+  const bestIndex = values.lastIndexOf(highest);
   const tick = (v, label) => `
     <line x1="${L}" y1="${y(v).toFixed(1)}" x2="${R}" y2="${y(v).toFixed(1)}" stroke="var(--separator)" stroke-width="1"></line>
     <text x="${R + 6}" y="${(y(v) + 3).toFixed(1)}" class="chart-tick">${label}</text>
   `;
-  const dots = weights.length <= 8 ? points.slice(0, -1).map(p => `
+  const dots = series.length <= 8 ? pts.slice(0, -1).map(p => `
     <circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="4" fill="var(--accent)" stroke="var(--surface)" stroke-width="2"></circle>
   `).join('') : '';
+  // Рекорд отмечаем только если он не на последней точке — там и так конец линии.
+  const best = markBest && bestIndex < series.length - 1 ? `
+    <circle cx="${pts[bestIndex][0].toFixed(1)}" cy="${pts[bestIndex][1].toFixed(1)}" r="4.5" fill="var(--green)" stroke="var(--surface)" stroke-width="2"></circle>
+  ` : '';
   // Прозрачные прямоугольники: попасть пальцем в точку радиусом 4 невозможно.
-  const hits = points.map((p, i) => `
-    <rect x="${Math.max(0, p[0] - 12).toFixed(1)}" y="${T}" width="24" height="${B - T}" fill="transparent" onclick="pickWeight(${i})"></rect>
+  const hits = pts.map((p, i) => `
+    <rect x="${Math.max(0, p[0] - 12).toFixed(1)}" y="${T}" width="24" height="${B - T}" fill="transparent" onclick="pickPoint('${id}',${i})"></rect>
   `).join('');
   return `
-    <svg class="weight-chart" viewBox="0 0 320 112" role="img" aria-label="График веса">
-      ${tick(highest, kgText(highest))}
-      ${tick(lowest, kgText(lowest))}
+    <svg class="weight-chart" viewBox="0 0 320 112" role="img" aria-label="График">
+      ${tick(highest, format(highest, true))}
+      ${lowest !== highest ? tick(lowest, format(lowest, true)) : ''}
       <path d="${line} L ${R} ${B} L ${L} ${B} Z" fill="var(--accent)" fill-opacity="0.12"></path>
       <path d="${line}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
       ${dots}
+      ${best}
       <circle cx="${last[0].toFixed(1)}" cy="${last[1].toFixed(1)}" r="4.5" fill="var(--accent)" stroke="var(--surface)" stroke-width="2"></circle>
-      <text x="${L}" y="108" class="chart-tick">${dayText(weights[0].date, true)}</text>
-      <text x="${R}" y="108" text-anchor="end" class="chart-tick">${dayText(weights[weights.length - 1].date, true)}</text>
+      <text x="${L}" y="108" class="chart-tick">${dayText(series[0].date, true)}</text>
+      <text x="${R}" y="108" text-anchor="end" class="chart-tick">${dayText(series[series.length - 1].date, true)}</text>
       ${hits}
     </svg>
   `;
+}
+// Объём тренировки — сколько всего килограммов поднято: вес × повторения.
+function sessionVolume(s){
+  let total = 0;
+  (s.exercises || []).forEach(ex => {
+    if (ex.isTime) return;
+    filledSets(ex).forEach(set => {
+      total += (Number(set.value1) || 0) * (Number(set.value2) || 0);
+    });
+  });
+  return Math.round(total);
+}
+function volumeSeries(){
+  return sessions
+    .map(s => ({ date: s.date, value: sessionVolume(s) }))
+    .filter(p => p.value > 0);
+}
+function volumeText(v, short){
+  return v >= 1000 ? (Math.round(v / 100) / 10 + ' т').replace('.', ',') : (short ? v : v + ' кг');
+}
+// Рабочий вес упражнения по тренировкам: берём лучший подход каждого дня.
+function exerciseSeries(name){
+  const out = [];
+  sessions.forEach(s => {
+    const ex = (s.exercises || []).find(e => e.name === name);
+    if (!ex) return;
+    const sets = filledSets(ex);
+    if (!sets.length) return;
+    const field = ex.isTime ? 'value1' : (Math.max(...sets.map(x => Number(x.value1) || 0)) > 0 ? 'value1' : 'value2');
+    out.push({
+      date: s.date,
+      value: Math.max(...sets.map(x => Number(x[field]) || 0)),
+      unit: ex.isTime ? 'сек' : (field === 'value1' ? 'кг' : 'повт.')
+    });
+  });
+  return out;
+}
+function toggleExerciseChart(name){
+  progressOpen = progressOpen === name ? null : name;
+  render();
 }
 const REST_CHOICES = [60, 90, 120, 180];
 const DEFAULT_REST = () => ({ enabled: true, seconds: 90, notify: true });
@@ -2711,8 +2776,48 @@ function renderProgress(){
       const adv = weightAdvice(getConfig(ex), profile);
       if (adv && adv.trend) val += `<span class="next-load ${adv.trend}">дальше ${loadLabel(ex.name, adv.weight, true)} ${adv.trend === 'up' ? '↑' : '↓'}</span>`;
     }
-    return `<div class="progress-row"><span class="pname">${ex.name}</span><span class="pval">${val}</span></div>`;
+    const series = exerciseSeries(ex.name);
+    const open = progressOpen === ex.name;
+    const unit = series.length ? series[series.length - 1].unit : 'кг';
+    const fmt = v => (unit === 'кг' ? kgText(v) : String(v)) + ' ' + unit;
+    const best = series.length ? Math.max(...series.map(p => p.value)) : 0;
+    const bestAt = series.length ? series.map(p => p.value).lastIndexOf(best) : -1;
+    const bestIsLast = bestAt === series.length - 1;
+    const recordText = bestIsLast
+      ? `Лучший результат — сейчас, ${fmt(best)}.`
+      : `Лучший результат — ${fmt(best)}, ${dayText(series[bestAt] ? series[bestAt].date : '')} (зелёная точка).`;
+    const chart = !open ? '' : series.length < 3
+      ? `<p class="swap-note">Нужно хотя бы три тренировки с этим упражнением — пока их ${series.length}.</p>`
+      : `
+        <div class="ex-chart">
+          ${lineChart('ex', series, (v, short) => short ? (unit === 'кг' ? kgText(v) : String(v)) : fmt(v), true)}
+          <p class="weight-caption" id="cap-ex">${dayText(series[series.length - 1].date)} — ${fmt(series[series.length - 1].value)}</p>
+          <p class="swap-note" style="margin:0;">${recordText}</p>
+        </div>
+      `;
+    return `
+      <button class="progress-row ${open ? 'open' : ''}" onclick="toggleExerciseChart('${ex.name.replace(/'/g, "\\'")}')">
+        <span class="pname">${ex.name}</span><span class="pval">${val}</span>
+      </button>
+      ${chart}
+    `;
   }).join('');
+  const volumes = volumeSeries();
+  const lastVolume = volumes.length ? volumes[volumes.length - 1] : null;
+  const monthAgo = todayStr(new Date(Date.now() - 30 * 86400000));
+  const monthTotal = volumes.filter(v => v.date > monthAgo).reduce((sum, v) => sum + v.value, 0);
+  const volumeCard = volumes.length < 3 ? '' : `
+    <p class="section-title">Объём</p>
+    <div class="card">
+      <div class="weight-head">
+        <span class="weight-now">${volumeText(monthTotal)}</span>
+        <span class="weight-delta">поднято за 30 дней</span>
+      </div>
+      ${lineChart('volume', volumes, (v, short) => volumeText(v, short))}
+      <p class="weight-caption" id="cap-volume" style="margin-bottom:0;">${dayText(lastVolume.date)} — ${volumeText(lastVolume.value)}</p>
+    </div>
+    <p class="lib-note">Объём — вес, умноженный на повторения, по всем подходам тренировки. Упражнения без веса в него не попадают.</p>
+  `;
   const w = weightStats();
   const deltaText = !w ? '' : w.delta === 0
     ? 'без изменений'
@@ -2734,8 +2839,8 @@ function renderProgress(){
           <span class="weight-delta">${deltaText}</span>
         </div>
       ` : '<p class="empty" style="margin:0 0 12px;">Запишите вес, чтобы видеть, как он меняется</p>'}
-      ${weightChart()}
-      ${w ? `<p class="weight-caption" id="weight-caption">${dayText(w.last.date)} — ${kgText(w.last.kg)} кг</p>` : ''}
+      ${lineChart('weight', weights.map(item => ({ date: item.date, value: item.kg })), v => kgText(v) + ' кг')}
+      ${w ? `<p class="weight-caption" id="cap-weight">${dayText(w.last.date)} — ${kgText(w.last.kg)} кг</p>` : ''}
       <div class="weight-form">
         <input type="text" id="weight-input" inputmode="decimal" maxlength="5" placeholder="${w ? kgText(w.last.kg) : 'кг'}"
           onkeydown="if (event.key === 'Enter') logWeight()">
@@ -2748,8 +2853,10 @@ function renderProgress(){
   `;
   return `
     ${weightCard}
-    <p class="section-title">Последний результат</p>
+    ${volumeCard}
+    <p class="section-title">Упражнения</p>
     <div class="card list">${rows}</div>
+    <p class="lib-note">Нажмите на упражнение — покажу, как менялся рабочий вес.</p>
     <div class="card list">
       <button class="row" onclick="resetAll()"><span class="row-body"><span class="row-label" style="color:var(--red)">${resetArmed ? 'Точно удалить всё? Нажми ещё раз' : 'Сбросить все данные'}</span></span></button>
     </div>
