@@ -1105,6 +1105,9 @@ let progressOpen = null;   // у какого упражнения раскры�
 let draftNote = '';        // заметка ко всей тренировке
 let draftDate = null;      // правим прошлую тренировку — её дата, иначе сегодня
 let deleteArmed = null;    // дата тренировки, удаление которой ждёт подтверждения
+let exportNote = '';       // что ответил сервер на выгрузку или восстановление
+let exportBusy = false;
+let restoreFile = null;    // разобранный файл копии, ждёт подтверждения
 let weights = [];          // история веса: [{ date, kg }]
 let weightError = '';
 let restCfg = null;        // настройки таймера отдыха
@@ -2129,6 +2132,78 @@ async function stopBroadcast(){
   }
   render();
 }
+async function exportData(format){
+  exportBusy = true;
+  exportNote = '';
+  render();
+  try {
+    const res = await fetch('/api/export', {
+      method: 'POST',
+      headers: apiHeaders(),
+      body: JSON.stringify({ format })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Ошибка сервера ' + res.status);
+    exportNote = 'Файл отправлен вам в Telegram.';
+  } catch (e) {
+    exportNote = e.message;
+  }
+  exportBusy = false;
+  render();
+}
+// Файл разбираем на телефоне, чтобы сразу сказать, что в нём, и только
+// после подтверждения отправлять на сервер.
+function pickBackup(input){
+  const file = input.files && input.files[0];
+  input.value = '';
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const data = JSON.parse(reader.result);
+      if (!data || typeof data !== 'object' || !Array.isArray(data.sessions)) throw new Error('bad');
+      restoreFile = data;
+      exportNote = '';
+    } catch (e) {
+      restoreFile = null;
+      exportNote = 'Это не похоже на копию дневника.';
+    }
+    render();
+  };
+  reader.onerror = () => { exportNote = 'Не удалось прочитать файл.'; render(); };
+  reader.readAsText(file);
+}
+async function applyBackup(){
+  if (!restoreFile) return;
+  exportBusy = true;
+  render();
+  try {
+    const res = await fetch('/api/export', {
+      method: 'POST',
+      headers: apiHeaders(),
+      body: JSON.stringify({ restore: restoreFile })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Ошибка сервера ' + res.status);
+    restoreFile = null;
+    exportBusy = false;
+    dropCache();
+    await init();
+    exportNote = 'Данные восстановлены: ' + data.sessions + ' тренировок.';
+    view = 'settings';
+    render();
+    return;
+  } catch (e) {
+    exportNote = e.message;
+  }
+  exportBusy = false;
+  render();
+}
+function cancelBackup(){
+  restoreFile = null;
+  exportNote = '';
+  render();
+}
 async function showLogin(){
   view = 'login';
   render();
@@ -2822,6 +2897,32 @@ function renderSettings(){
       ? 'Отсчёт начинается сам, когда отмечаете подход выполненным. Кнопка «Пропустить» обрывает его.'
       : 'Отсчёт между подходами не показывается.'}</p>
   `;
+  const dataGroup = `
+    <p class="section-title">Данные</p>
+    <div class="row-2" style="margin:0 16px;">
+      <button class="btn btn-outline" onclick="exportData('csv')" ${exportBusy ? 'disabled' : ''}>Таблица CSV</button>
+      <button class="btn btn-outline" onclick="exportData('json')" ${exportBusy ? 'disabled' : ''}>Копия</button>
+    </div>
+    <p class="lib-note" style="margin-top:12px;">Бот пришлёт файл в Telegram. CSV открывается в Excel и Google Таблицах, копия целиком нужна, чтобы восстановить дневник.</p>
+    <div class="card list">
+      ${restoreFile ? `
+        <div class="row" style="padding:14px 18px; display:block;">
+          <p style="margin:0 0 10px; font-size:15px;">В файле ${(restoreFile.sessions || []).length} тренировок. Заменить ими всё, что есть сейчас?</p>
+          <div class="row-2">
+            <button class="btn btn-outline narrow" onclick="cancelBackup()">Отмена</button>
+            <button class="btn btn-primary" onclick="applyBackup()" ${exportBusy ? 'disabled' : ''}>Восстановить</button>
+          </div>
+        </div>
+      ` : `
+        <label class="row" style="cursor:pointer;">
+          <span class="icon-sq" style="background:#8E8E93">${icon('stairs')}</span>
+          <span class="row-body"><span class="row-label accent">Загрузить копию из файла</span></span>
+          <input type="file" accept="application/json,.json" style="display:none" onchange="pickBackup(this)">
+        </label>
+      `}
+    </div>
+    ${exportNote ? `<p class="lib-note">${escapeHtml(exportNote)}</p>` : ''}
+  `;
   const statsGroup = stats ? `
     <p class="section-title">Статистика</p>
     <div class="card list">
@@ -2886,6 +2987,7 @@ function renderSettings(){
     ${themeGroup}
     ${remindersGroup}
     ${restGroup}
+    ${dataGroup}
     ${statsGroup}
     ${broadcastGroup}
     ${accountGroup}

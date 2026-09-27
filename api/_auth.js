@@ -90,6 +90,7 @@ async function botRequest(method, params) {
 }
 
 module.exports = {
+  botToken,
   siteUrl,
   safeEqual,
   webhookSecret,

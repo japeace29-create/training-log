@@ -99,3 +99,6 @@ module.exports = async (req, res) => {
     res.status(500).json({ error: String(e && e.message || e) });
   }
 };
+
+// Выгрузка и восстановление пользуются той же проверкой данных.
+module.exports.normalize = normalize;
