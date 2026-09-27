@@ -570,10 +570,30 @@
   .exercise .advice b{color:var(--green); font-size:15px; font-weight:600; white-space:nowrap;}
   .set-row{display:flex; align-items:center; gap:8px; margin-bottom:8px;}
   .set-row .set-label{
-    width:18px;
+    flex:0 0 auto;
+    width:22px;
+    padding:2px 0;
+    border:none;
+    background:none;
+    font:inherit;
     font-size:13px;
     color:var(--text-muted);
     font-variant-numeric:tabular-nums;
+    text-align:left;
+    cursor:pointer;
+  }
+  .set-row .set-label.warm{color:var(--orange); font-weight:700;}
+  .set-row.warmup input{background:transparent; box-shadow:inset 0 0 0 1px var(--separator);}
+  .add-warmup{
+    margin:2px 0 0;
+    padding:4px 0;
+    border:none;
+    background:none;
+    color:var(--accent);
+    font:inherit;
+    font-size:13px;
+    font-weight:600;
+    cursor:pointer;
   }
   .set-row input,
   .cfg-inputs input{
@@ -1180,8 +1200,9 @@ function nextType(){
 function todaysSession(){
   return sessions.find(s => s.date === todayStr());
 }
+// Разминка не считается нигде: ни в рекордах, ни в объёме, ни в подсказках.
 function filledSets(ex){
-  return ex.sets.filter(s => Number(ex.isTime ? s.value1 : s.value2) > 0);
+  return ex.sets.filter(s => !s.warmup && Number(ex.isTime ? s.value1 : s.value2) > 0);
 }
 function lastPerformance(name, before){
   for (let i = sessions.length - 1; i >= 0; i--){
@@ -2447,7 +2468,12 @@ function editSession(date){
       note: ex.note || '',
       slot: known ? known.slot : null,
       advice: null,
-      sets: ex.sets.map(set => ({ value1: set.value1 === '0' ? '' : set.value1, value2: set.value2 === '0' ? '' : set.value2, done: !!set.done }))
+      sets: ex.sets.map(set => ({
+        value1: set.value1 === '0' ? '' : set.value1,
+        value2: set.value2 === '0' ? '' : set.value2,
+        done: !!set.done,
+        warmup: !!set.warmup
+      }))
     };
   });
   deleteArmed = null;
@@ -2493,7 +2519,12 @@ async function finishWorkout(){
       name: ex.name,
       isTime: ex.isTime,
       note: (ex.note || '').trim(),
-      sets: ex.sets.map(s => ({ value1: s.value1 || '0', value2: s.value2 || '0', done: s.done }))
+      sets: ex.sets.map(s => ({
+        value1: s.value1 || '0',
+        value2: s.value2 || '0',
+        done: s.done,
+        ...(s.warmup ? { warmup: true } : {})
+      }))
     }))
   };
   stopRest();
@@ -2507,6 +2538,32 @@ async function finishWorkout(){
   await saveAll();
   render();
 }
+function toggleWarmup(exIdx, setIdx){
+  const sets = draft[exIdx].sets;
+  const set = sets[setIdx];
+  // Добавленную строку разминки вторым нажатием убираем, обычную —
+  // возвращаем в рабочие подходы.
+  if (set.warmup && set.added) sets.splice(setIdx, 1);
+  else set.warmup = !set.warmup;
+  render();
+  saveAll();
+}
+function addWarmup(exIdx){
+  const ex = draft[exIdx];
+  const working = ex.sets.find(s => !s.warmup && s.value1) || ex.sets.find(s => !s.warmup);
+  const base = Number(working && working.value1) || (ex.advice && ex.advice.weight) || 0;
+  const load = LOADS[ex.name];
+  const half = base ? (load ? roundLoad(base * 0.5, load.eq) : Math.round(base * 0.5)) : '';
+  ex.sets.unshift({
+    value1: ex.isTime ? '' : (half ? String(half) : ''),
+    value2: ex.isTime ? '' : '8',
+    done: false,
+    warmup: true,
+    added: true
+  });
+  render();
+  saveAll();
+}
 function setVal(exIdx, setIdx, field, value){
   draft[exIdx].sets[setIdx][field] = value;
   scheduleSave();
@@ -2517,7 +2574,7 @@ function toggleDone(exIdx, setIdx){
   set.done = !set.done;
   if (set.done){
     const record = exerciseRecord(ex.name, todayStr());
-    if (record && setScore(ex.isTime, set) > record.score) haptic();
+    if (record && !set.warmup && setScore(ex.isTime, set) > record.score) haptic();
     startRest(ex.name);
   }
   render();
@@ -2705,7 +2762,7 @@ function renderWorkout(){
     const record = exerciseRecord(ex.name, todayStr());
     // Рекордным считаем только отмеченный подход: пока цифра не подтверждена,
     // это ещё не результат.
-    const beats = ex.sets.map(s => record && s.done && setScore(ex.isTime, s) > record.score);
+    const beats = ex.sets.map(s => record && s.done && !s.warmup && setScore(ex.isTime, s) > record.score);
     const bestNow = ex.sets.reduce((acc, s, i) => (
       beats[i] && (!acc || setScore(ex.isTime, s) > setScore(ex.isTime, acc)) ? s : acc
     ), null);
@@ -2715,11 +2772,15 @@ function renderWorkout(){
         ${adv.weight ? `Рекомендуемый вес: <b>${loadLabel(ex.name, adv.weight)}${adv.trend === 'up' ? ' ↑' : adv.trend === 'down' ? ' ↓' : ''}</b><br>` : ''}${adv.text}
       </p>
     `;
+    let working = 0;
     const setsHtml = ex.sets.map((s, setIdx) => {
+      // Разминка не нумеруется: рабочие подходы считаются отдельно.
+      const label = s.warmup ? 'Р' : String(++working);
+      const tag = `<button class="set-label${s.warmup ? ' warm' : ''}" onclick="toggleWarmup(${exIdx},${setIdx})" title="Разминочный подход">${label}</button>`;
       if (ex.isTime){
         return `
-          <div class="set-row${beats[setIdx] ? ' record' : ''}">
-            <span class="set-label">${setIdx+1}</span>
+          <div class="set-row${beats[setIdx] ? ' record' : ''}${s.warmup ? ' warmup' : ''}">
+            ${tag}
             <input type="number" inputmode="numeric" placeholder="0" value="${s.value1}"
               oninput="setVal(${exIdx},${setIdx},'value1',this.value)">
             <span class="unit">сек</span>
@@ -2728,8 +2789,8 @@ function renderWorkout(){
         `;
       }
       return `
-        <div class="set-row${beats[setIdx] ? ' record' : ''}">
-          <span class="set-label">${setIdx+1}</span>
+        <div class="set-row${beats[setIdx] ? ' record' : ''}${s.warmup ? ' warmup' : ''}">
+          ${tag}
           <input type="number" inputmode="decimal" placeholder="кг" value="${s.value1}"
             oninput="setVal(${exIdx},${setIdx},'value1',this.value)">
           <span class="unit">кг</span>
@@ -2756,6 +2817,7 @@ function renderWorkout(){
         ${prevNote ? `<p class="prev-note">💬 ${dayText(prevNote.date, true)}: ${escapeHtml(prevNote.note)}</p>` : ''}
         ${adviceHtml}
         ${setsHtml}
+        <button class="add-warmup" onclick="addWarmup(${exIdx})">+ разминочный подход</button>
         ${bestNow ? `<p class="record-line">🏆 Новый рекорд: ${setLabel(ex.isTime, bestNow)} — было ${record.label}</p>` : ''}
         <textarea class="note-input autogrow" rows="1" maxlength="200" placeholder="Заметка к упражнению"
           oninput="setExerciseNote(${exIdx}, this.value); autoGrow(this)">${escapeHtml(ex.note || '')}</textarea>
