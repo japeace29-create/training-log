@@ -29,6 +29,22 @@ function rest(r){
   return { enabled: !!r.enabled, seconds, notify: !!r.notify };
 }
 
+// История веса: по одной записи на дату, не больше пятисот последних.
+function weights(list){
+  if (!Array.isArray(list)) return [];
+  const byDate = new Map();
+  for (const item of list){
+    if (!item || !/^\d{4}-\d{2}-\d{2}$/.test(String(item.date))) continue;
+    const kg = Math.round(Number(item.kg) * 10) / 10;
+    if (!(kg >= 30 && kg <= 250)) continue;
+    byDate.set(String(item.date), kg);
+  }
+  return [...byDate.entries()]
+    .map(([date, kg]) => ({ date, kg }))
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .slice(-500);
+}
+
 function normalize(d){
   return {
     sessions: Array.isArray(d.sessions) ? d.sessions : [],
@@ -36,7 +52,8 @@ function normalize(d){
     profile: (d.profile && typeof d.profile === 'object') ? d.profile : null,
     draft: d.draft || null,
     reminders: reminders(d.reminders),
-    rest: rest(d.rest)
+    rest: rest(d.rest),
+    weights: weights(d.weights)
   };
 }
 

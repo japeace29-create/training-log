@@ -527,6 +527,39 @@
   }
   .segmented button.on{background:var(--surface-3);}
   .quiz-error{color:var(--red); font-size:14px; margin:-4px 4px 14px;}
+  .weight-head{display:flex; align-items:baseline; justify-content:space-between; gap:12px; margin-bottom:6px;}
+  .weight-now{font-family:var(--font-display); font-size:34px; font-weight:700; line-height:1;}
+  .weight-unit{font-size:17px; font-weight:600; color:var(--text-muted); margin-left:5px;}
+  .weight-delta{font-size:14px; color:var(--text-muted); text-align:right;}
+  .weight-chart{display:block; width:100%; height:auto; margin:4px 0 2px; overflow:visible;}
+  .chart-tick{fill:var(--text-faint); font-size:10px; font-family:var(--font);}
+  .weight-caption{margin:0 0 12px; font-size:13px; color:var(--text-muted);}
+  .weight-form{display:flex; gap:10px;}
+  .weight-form input{
+    flex:1;
+    min-width:0;
+    background:var(--surface-2);
+    border:none;
+    border-radius:var(--radius-s);
+    color:var(--text);
+    font:inherit;
+    font-size:17px;
+    padding:11px 14px;
+  }
+  .weight-form input:focus{outline:none;}
+  .weight-form input::placeholder{color:var(--text-faint);}
+  .weight-form .btn{width:auto; flex:0 0 auto; padding:11px 20px; font-size:16px;}
+  .weight-table{margin-top:14px; font-size:14px;}
+  .weight-table summary{color:var(--accent); cursor:pointer; font-size:14px;}
+  .weight-row{
+    display:flex;
+    justify-content:space-between;
+    padding:7px 0;
+    border-bottom:0.5px solid var(--separator);
+    color:var(--text-muted);
+    font-variant-numeric:tabular-nums;
+  }
+  .weight-row:last-child{border-bottom:none;}
   body.resting .wrap{padding-bottom:calc(env(safe-area-inset-bottom) + 96px);}
   .rest-bar{
     position:fixed;
@@ -854,6 +887,8 @@ const TG_INIT_DATA = new URLSearchParams(location.hash.slice(1)).get('tgWebAppDa
 let botName = '';
 let loginError = '';
 let loadError = '';
+let weights = [];          // история веса: [{ date, kg }]
+let weightError = '';
 let restCfg = null;        // настройки таймера отдыха
 let rest = null;           // идущий отсчёт: { endsAt, name, done }
 let restTicker = null;
@@ -1185,6 +1220,7 @@ async function saveProfile(){
   program = buildProgram(profile);
   overrides = {};
   reminders = { ...quiz.reminders, tz: timezone() };
+  recordWeight(profile.weight, profile.date);
   quiz = null;
   view = 'today';
   render();
@@ -1233,6 +1269,7 @@ function writeCache(pending){
       profile,
       reminders,
       rest: restCfg,
+      weights,
       draft: activeType && draft ? { type: activeType, exercises: draft } : null,
       pending: !!pending,
       at: Date.now()
@@ -1248,6 +1285,11 @@ function applyData(data){
   profile = (data.profile && typeof data.profile === 'object') ? data.profile : null;
   reminders = (data.reminders && typeof data.reminders === 'object') ? data.reminders : null;
   restCfg = (data.rest && typeof data.rest === 'object') ? data.rest : DEFAULT_REST();
+  weights = Array.isArray(data.weights) ? data.weights : [];
+  // У тех, кто заводил профиль до истории веса, первая точка — из теста.
+  if (!weights.length && profile && profile.weight){
+    weights = [{ date: profile.date || todayStr(), kg: Number(profile.weight) }];
+  }
   program = profile ? buildProgram(profile) : DEFAULT_PROGRAM;
   const saved = data.draft;
   if (saved && program[saved.type] && Array.isArray(saved.exercises)){
@@ -1267,7 +1309,11 @@ function mergeData(local, remote){
   const byDate = new Map();
   (remote.sessions || []).forEach(s => byDate.set(s.date, s));
   (local.sessions || []).forEach(s => byDate.set(s.date, s));
+  const weighIns = new Map();
+  (remote.weights || []).forEach(w => weighIns.set(w.date, w));
+  (local.weights || []).forEach(w => weighIns.set(w.date, w));
   return {
+    weights: [...weighIns.values()].sort((a, b) => a.date.localeCompare(b.date)),
     sessions: [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date)),
     overrides: local.overrides,
     profile: local.profile || remote.profile,
@@ -1289,7 +1335,8 @@ async function loadAll(){
       profile: (data.profile && typeof data.profile === 'object') ? data.profile : null,
       draft: data.draft || null,
       reminders: (data.reminders && typeof data.reminders === 'object') ? data.reminders : null,
-      rest: (data.rest && typeof data.rest === 'object') ? data.rest : null
+      rest: (data.rest && typeof data.rest === 'object') ? data.rest : null,
+      weights: Array.isArray(data.weights) ? data.weights : []
     };
   }catch(e){
     console.error('Load error', e);
@@ -1314,6 +1361,10 @@ async function pullAndMerge(){
   data.sessions.forEach(s => byDate.set(s.date, s));
   sessions.forEach(s => byDate.set(s.date, s));
   sessions = [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date));
+  const weighIns = new Map();
+  (data.weights || []).forEach(w => weighIns.set(w.date, w));
+  weights.forEach(w => weighIns.set(w.date, w));
+  weights = [...weighIns.values()].sort((a, b) => a.date.localeCompare(b.date));
 }
 async function sendSave(){
   try{
@@ -1327,6 +1378,7 @@ async function sendSave(){
         profile,
         reminders,
         rest: restCfg,
+        weights,
         draft: activeType && draft ? { type: activeType, exercises: draft } : null
       })
     });
@@ -1391,6 +1443,101 @@ function remindersSummary(r){
   if (!r || !r.enabled || !r.days.length) return 'Напоминания выключены';
   const days = DAY_LABELS.filter(([, day]) => r.days.includes(day)).map(([label]) => label).join(', ');
   return `Напоминания: ${days} в ${r.time}`;
+}
+function kgText(n){
+  return String(Math.round(n * 10) / 10).replace('.', ',');
+}
+function dayText(dateStr, short){
+  return new Date(dateStr + 'T00:00:00')
+    .toLocaleDateString('ru-RU', { day: 'numeric', month: short ? 'short' : 'long' });
+}
+// Одна запись на дату: взвесились второй раз за день — заменяем.
+function recordWeight(kg, date){
+  const value = Math.round(Number(kg) * 10) / 10;
+  if (!(value >= 30 && value <= 250)) return false;
+  const day = date || todayStr();
+  weights = weights.filter(w => w.date !== day)
+    .concat([{ date: day, kg: value }])
+    .sort((a, b) => a.date.localeCompare(b.date));
+  return true;
+}
+function logWeight(){
+  const input = document.getElementById('weight-input');
+  if (!recordWeight(String(input ? input.value : '').replace(',', '.'))){
+    weightError = 'Введите вес от 30 до 250 кг';
+    render();
+    return;
+  }
+  weightError = '';
+  const last = weights[weights.length - 1];
+  // Рекомендуемые веса считаются от массы тела, поэтому обновляем и профиль.
+  if (profile && last.date === todayStr()){
+    profile.weight = last.kg;
+    program = buildProgram(profile);
+  }
+  render();
+  saveAll();
+}
+function weightStats(){
+  if (!weights.length) return null;
+  const last = weights[weights.length - 1];
+  const monthAgo = todayStr(new Date(Date.now() - 30 * 86400000));
+  const older = weights.filter(w => w.date <= monthAgo);
+  const base = older.length ? older[older.length - 1] : weights[0];
+  return {
+    last,
+    base,
+    delta: Math.round((last.kg - base.kg) * 10) / 10,
+    sinceMonth: older.length > 0
+  };
+}
+function pickWeight(i){
+  const w = weights[i];
+  const caption = document.getElementById('weight-caption');
+  if (w && caption) caption.textContent = dayText(w.date) + ' — ' + kgText(w.kg) + ' кг';
+}
+// Линия веса по времени: одна серия, поэтому без легенды — заголовок её называет.
+function weightChart(){
+  if (weights.length < 3) return '';
+  const L = 8, R = 266, T = 12, B = 92;   // справа оставлено место под подписи
+  const times = weights.map(w => Date.parse(w.date));
+  const span = Math.max(1, times[times.length - 1] - times[0]);
+  const values = weights.map(w => w.kg);
+  const lowest = Math.min(...values);
+  const highest = Math.max(...values);
+  let min = lowest;
+  let max = highest;
+  if (max - min < 2){ const mid = (min + max) / 2; min = mid - 1; max = mid + 1; }
+  else { const pad = (max - min) * 0.18; min -= pad; max += pad; }
+  const x = i => L + (times[i] - times[0]) / span * (R - L);
+  const y = v => B - (v - min) / (max - min) * (B - T);
+  const points = weights.map((w, i) => [x(i), y(w.kg)]);
+  const line = points.map((p, i) => (i ? 'L' : 'M') + p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join(' ');
+  const last = points[points.length - 1];
+  const tick = (v, label) => `
+    <line x1="${L}" y1="${y(v).toFixed(1)}" x2="${R}" y2="${y(v).toFixed(1)}" stroke="var(--separator)" stroke-width="1"></line>
+    <text x="${R + 6}" y="${(y(v) + 3).toFixed(1)}" class="chart-tick">${label}</text>
+  `;
+  const dots = weights.length <= 8 ? points.slice(0, -1).map(p => `
+    <circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="4" fill="var(--accent)" stroke="var(--surface)" stroke-width="2"></circle>
+  `).join('') : '';
+  // Прозрачные прямоугольники: попасть пальцем в точку радиусом 4 невозможно.
+  const hits = points.map((p, i) => `
+    <rect x="${Math.max(0, p[0] - 12).toFixed(1)}" y="${T}" width="24" height="${B - T}" fill="transparent" onclick="pickWeight(${i})"></rect>
+  `).join('');
+  return `
+    <svg class="weight-chart" viewBox="0 0 320 112" role="img" aria-label="График веса">
+      ${tick(highest, kgText(highest))}
+      ${tick(lowest, kgText(lowest))}
+      <path d="${line} L ${R} ${B} L ${L} ${B} Z" fill="var(--accent)" fill-opacity="0.12"></path>
+      <path d="${line}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+      ${dots}
+      <circle cx="${last[0].toFixed(1)}" cy="${last[1].toFixed(1)}" r="4.5" fill="var(--accent)" stroke="var(--surface)" stroke-width="2"></circle>
+      <text x="${L}" y="108" class="chart-tick">${dayText(weights[0].date, true)}</text>
+      <text x="${R}" y="108" text-anchor="end" class="chart-tick">${dayText(weights[weights.length - 1].date, true)}</text>
+      ${hits}
+    </svg>
+  `;
 }
 const REST_CHOICES = [60, 90, 120, 180];
 const DEFAULT_REST = () => ({ enabled: true, seconds: 90, notify: true });
@@ -1748,7 +1895,9 @@ function toggleDone(exIdx, setIdx){
   saveAll();
 }
 function switchTab(v){
-  view = v; render();
+  view = v;
+  weightError = '';
+  render();
   if (v === 'settings' && !statsChecked) loadStats();
 }
 async function resetAll(){
@@ -2041,7 +2190,7 @@ function renderSettings(){
     <div class="card list">
       ${row('person', '#0091FF', 'Пол', SEX_LABELS[profile.sex] || '—')}
       ${row('calendar', '#8E8E93', 'Возраст', profile.age)}
-      ${row('ruler', '#FF9230', 'Рост и вес', profile.height + ' см · ' + profile.weight + ' кг')}
+      ${row('ruler', '#FF9230', 'Рост и вес', profile.height + ' см · ' + kgText(profile.weight) + ' кг')}
       ${row('heart', '#FF375F', 'ИМТ', bmiText(profile).replace('ИМТ ', ''))}
       ${row('target', '#30D158', 'Цель', optionLabel('goal', profile.goal))}
       ${row('star', '#6D7CFF', 'Опыт', optionLabel('level', profile.level))}
@@ -2227,8 +2376,42 @@ function renderProgress(){
     }
     return `<div class="progress-row"><span class="pname">${ex.name}</span><span class="pval">${val}</span></div>`;
   }).join('');
+  const w = weightStats();
+  const deltaText = !w ? '' : w.delta === 0
+    ? 'без изменений'
+    : (w.delta > 0 ? '+' : '−') + kgText(Math.abs(w.delta)) + ' кг ' + (w.sinceMonth ? 'за 30 дней' : 'с первой записи');
+  const table = weights.length > 1 ? `
+    <details class="weight-table">
+      <summary>Все записи (${weights.length})</summary>
+      ${[...weights].reverse().map(item => `
+        <div class="weight-row"><span>${dayText(item.date)}</span><span>${kgText(item.kg)} кг</span></div>
+      `).join('')}
+    </details>
+  ` : '';
+  const weightCard = `
+    <p class="section-title" style="margin-top:4px;">Вес</p>
+    <div class="card">
+      ${w ? `
+        <div class="weight-head">
+          <span class="weight-now">${kgText(w.last.kg)}<span class="weight-unit">кг</span></span>
+          <span class="weight-delta">${deltaText}</span>
+        </div>
+      ` : '<p class="empty" style="margin:0 0 12px;">Запишите вес, чтобы видеть, как он меняется</p>'}
+      ${weightChart()}
+      ${w ? `<p class="weight-caption" id="weight-caption">${dayText(w.last.date)} — ${kgText(w.last.kg)} кг</p>` : ''}
+      <div class="weight-form">
+        <input type="text" id="weight-input" inputmode="decimal" maxlength="5" placeholder="${w ? kgText(w.last.kg) : 'кг'}"
+          onkeydown="if (event.key === 'Enter') logWeight()">
+        <button class="btn btn-outline" onclick="logWeight()">Записать</button>
+      </div>
+      ${weightError ? `<p class="quiz-error" style="margin-bottom:0;">${weightError}</p>` : ''}
+      ${table}
+    </div>
+    <p class="lib-note">От веса тела считаются рекомендуемые веса в упражнениях — записывайте его хотя бы раз в неделю.</p>
+  `;
   return `
-    <p class="section-title" style="margin-top:4px;">Последний результат</p>
+    ${weightCard}
+    <p class="section-title">Последний результат</p>
     <div class="card list">${rows}</div>
     <div class="card list">
       <button class="row" onclick="resetAll()"><span class="row-body"><span class="row-label" style="color:var(--red)">${resetArmed ? 'Точно удалить всё? Нажми ещё раз' : 'Сбросить все данные'}</span></span></button>
