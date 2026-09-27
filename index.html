@@ -3084,10 +3084,12 @@ function renderProgress(){
         </div>
       `;
     return `
-      <button class="progress-row ${open ? 'open' : ''}" onclick="toggleExerciseChart('${ex.name.replace(/'/g, "\\'")}')">
-        <span class="pname">${ex.name}</span><span class="pval">${val}</span>
-      </button>
-      ${chart}
+      <div class="progress-item">
+        <button class="progress-row ${open ? 'open' : ''}" onclick="toggleExerciseChart('${ex.name.replace(/'/g, "\\'")}')">
+          <span class="pname">${ex.name}</span><span class="pval">${val}</span>
+        </button>
+        ${chart}
+      </div>
     `;
   }).join('');
   const volumes = volumeSeries();
