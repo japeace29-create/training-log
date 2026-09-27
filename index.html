@@ -499,6 +499,19 @@
   .swap-option.auto{color:var(--accent); justify-content:center; font-weight:600;}
   .swap-eq{display:block; font-size:12px; color:var(--text-muted); margin-top:2px;}
   .swap-note{font-size:13px; color:var(--text-muted); margin:8px 0 12px;}
+  .set-row.record{
+    background:var(--green-tint);
+    border-radius:12px;
+    margin:0 -8px;
+    padding-left:8px;
+    padding-right:8px;
+  }
+  .record-line{
+    margin:8px 0 0;
+    font-size:13px;
+    font-weight:600;
+    color:var(--green);
+  }
   .video-btn{
     flex:0 0 auto;
     display:inline-flex;
@@ -1767,6 +1780,37 @@ function volumeSeries(){
 function volumeText(v, short){
   return v >= 1000 ? (Math.round(v / 100) / 10 + ' т').replace('.', ',') : (short ? v : v + ' кг');
 }
+// Чтобы сравнивать подходы с разным числом повторений, приводим их
+// к оценке одноповторного максимума (формула Эпли).
+function setScore(isTime, set){
+  const value = Number(set.value1) || 0;
+  const reps = Number(set.value2) || 0;
+  if (isTime) return value;
+  if (value > 0) return value * (1 + Math.max(reps, 1) / 30);
+  return reps;
+}
+function setLabel(isTime, set){
+  const value = Number(set.value1) || 0;
+  const reps = Number(set.value2) || 0;
+  if (isTime) return value + ' сек';
+  if (value > 0) return kgText(value) + ' кг × ' + reps;
+  return reps + ' повт.';
+}
+// Лучший подход за всю историю упражнения. before исключает текущий день.
+function exerciseRecord(name, before){
+  let best = null;
+  sessions.forEach(s => {
+    if (before && s.date >= before) return;
+    const ex = (s.exercises || []).find(e => e.name === name);
+    if (!ex) return;
+    filledSets(ex).forEach(set => {
+      const score = setScore(ex.isTime, set);
+      if (!score) return;
+      if (!best || score > best.score) best = { score, label: setLabel(ex.isTime, set), date: s.date };
+    });
+  });
+  return best;
+}
 // Рабочий вес упражнения по тренировкам: берём лучший подход каждого дня.
 function exerciseSeries(name){
   const out = [];
@@ -2243,9 +2287,14 @@ function setVal(exIdx, setIdx, field, value){
   scheduleSave();
 }
 function toggleDone(exIdx, setIdx){
-  const set = draft[exIdx].sets[setIdx];
+  const ex = draft[exIdx];
+  const set = ex.sets[setIdx];
   set.done = !set.done;
-  if (set.done) startRest(draft[exIdx].name);
+  if (set.done){
+    const record = exerciseRecord(ex.name, todayStr());
+    if (record && setScore(ex.isTime, set) > record.score) haptic();
+    startRest(ex.name);
+  }
   render();
   saveAll();
 }
@@ -2422,6 +2471,13 @@ function renderToday(){
 function renderWorkout(){
   const exercisesHtml = draft.map((ex, exIdx) => {
     const perf = lastPerformance(ex.name, todayStr());
+    const record = exerciseRecord(ex.name, todayStr());
+    // Рекордным считаем только отмеченный подход: пока цифра не подтверждена,
+    // это ещё не результат.
+    const beats = ex.sets.map(s => record && s.done && setScore(ex.isTime, s) > record.score);
+    const bestNow = ex.sets.reduce((acc, s, i) => (
+      beats[i] && (!acc || setScore(ex.isTime, s) > setScore(ex.isTime, acc)) ? s : acc
+    ), null);
     const adv = ex.advice;
     const adviceHtml = !adv ? '' : `
       <p class="advice">
@@ -2431,7 +2487,7 @@ function renderWorkout(){
     const setsHtml = ex.sets.map((s, setIdx) => {
       if (ex.isTime){
         return `
-          <div class="set-row">
+          <div class="set-row${beats[setIdx] ? ' record' : ''}">
             <span class="set-label">${setIdx+1}</span>
             <input type="number" inputmode="numeric" placeholder="0" value="${s.value1}"
               oninput="setVal(${exIdx},${setIdx},'value1',this.value)">
@@ -2441,7 +2497,7 @@ function renderWorkout(){
         `;
       }
       return `
-        <div class="set-row">
+        <div class="set-row${beats[setIdx] ? ' record' : ''}">
           <span class="set-label">${setIdx+1}</span>
           <input type="number" inputmode="decimal" placeholder="кг" value="${s.value1}"
             oninput="setVal(${exIdx},${setIdx},'value1',this.value)">
@@ -2468,6 +2524,7 @@ function renderWorkout(){
         <p class="last-time">${hintText(perf)}</p>
         ${adviceHtml}
         ${setsHtml}
+        ${bestNow ? `<p class="record-line">🏆 Новый рекорд: ${setLabel(ex.isTime, bestNow)} — было ${record.label}</p>` : ''}
       </div>
     `;
   }).join('');
@@ -2783,9 +2840,9 @@ function renderProgress(){
     const best = series.length ? Math.max(...series.map(p => p.value)) : 0;
     const bestAt = series.length ? series.map(p => p.value).lastIndexOf(best) : -1;
     const bestIsLast = bestAt === series.length - 1;
-    const recordText = bestIsLast
-      ? `Лучший результат — сейчас, ${fmt(best)}.`
-      : `Лучший результат — ${fmt(best)}, ${dayText(series[bestAt] ? series[bestAt].date : '')} (зелёная точка).`;
+    const rec = exerciseRecord(ex.name);
+    const recordText = (rec ? `🏆 Рекорд — ${rec.label}, ${dayText(rec.date)}. ` : '')
+      + (bestIsLast ? 'Последняя тренировка — лучшая.' : 'Зелёная точка — лучший рабочий вес.');
     const chart = !open ? '' : series.length < 3
       ? `<p class="swap-note">Нужно хотя бы три тренировки с этим упражнением — пока их ${series.length}.</p>`
       : `
