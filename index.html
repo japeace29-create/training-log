@@ -45,7 +45,9 @@
     --glow-b-o:0.22;
     --glow-c:0 200 165;
     --glow-c-o:0.14;
-    --glass:rgba(28,28,30,0.62);
+    --glass:rgba(28,28,30,0.55);
+    --glass-edge:rgba(255,255,255,0.10);
+    --glass-bar:rgba(28,28,30,0.82);
     color-scheme:dark;
   }
   /* Светлая тема сделана по мотивам «Здоровья» в iOS 27: белые карточки
@@ -70,20 +72,30 @@
     --glow-b-o:0.34;
     --glow-c:70 220 180;
     --glow-c-o:0.30;
-    --glass:rgba(255,255,255,0.7);
+    --glass:rgba(255,255,255,0.55);
+    --glass-edge:rgba(255,255,255,0.65);
+    --glass-bar:rgba(255,255,255,0.86);
     color-scheme:light;
   }
   :root[data-theme="light"] .card{
     box-shadow:0 1px 2px rgba(0,0,0,0.05), 0 12px 28px rgba(0,0,0,0.05);
   }
   :root[data-theme="light"] .tabbar{
-    box-shadow:0 1px 2px rgba(0,0,0,0.05), 0 10px 24px rgba(0,0,0,0.06);
+    box-shadow:0 8px 24px rgba(0,0,0,0.07);
   }
   :root[data-theme="light"] .tabbar button.active{
     background:#FFFFFF;
-    box-shadow:0 1px 3px rgba(0,0,0,0.14);
+    box-shadow:0 1px 3px rgba(0,0,0,0.12), 0 4px 12px rgba(0,0,0,0.07);
   }
-  :root[data-theme="dark"] .tabbar button.active{background:rgba(120,120,128,0.32);}
+  /* На светлом фоне серая кнопка почти сливается — поднимаем её белым и тенью. */
+  :root[data-theme="light"] .btn-outline{
+    background:#FFFFFF;
+    box-shadow:0 1px 2px rgba(0,0,0,0.06), 0 6px 16px rgba(0,0,0,0.07);
+  }
+  :root[data-theme="light"] .card .btn-outline{
+    background:var(--surface-2);
+    box-shadow:none;
+  }
   :root[data-theme="light"] .set-row .done-toggle{border-color:rgba(60,60,67,0.28); color:var(--text);}
   :root[data-theme="light"] .banner{background:#FFF1DC; color:#8A5200;}
   :root[data-theme="light"] .rest-bar{box-shadow:0 10px 30px rgba(0,0,0,0.16);}
@@ -309,16 +321,18 @@
     color:#fff;
   }
   .row input::placeholder{color:var(--text-faint);}
+  .bc-row{padding:0 18px;}
   .bc-text{
     width:100%;
     background:none;
     border:none;
-    resize:vertical;
+    resize:none;
+    overflow:hidden;
     color:var(--text);
     font:inherit;
-    font-size:16px;
-    line-height:1.4;
-    padding:4px 0;
+    font-size:15px;
+    line-height:1.5;
+    padding:14px 0 12px;
   }
   .bc-text:focus{outline:none;}
   .bc-text::placeholder{color:var(--text-faint);}
@@ -364,6 +378,7 @@
   }
   .row-2{display:flex; gap:10px;}
   .row-2 .btn{flex:1;}
+  .row-2 .btn.narrow{flex:0 0 100px;}
   .settings-link{text-align:center; margin-top:18px;}
   .settings-link .btn-ghost{color:var(--red);}
 
@@ -371,30 +386,35 @@
   .tabbar{
     display:flex;
     align-items:center;
-    gap:2px;
+    gap:3px;
     margin-bottom:16px;
-    padding:4px;
+    padding:4px 5px;
     background:var(--glass);
-    -webkit-backdrop-filter:saturate(180%) blur(20px);
-    backdrop-filter:saturate(180%) blur(20px);
+    -webkit-backdrop-filter:saturate(200%) blur(24px);
+    backdrop-filter:saturate(200%) blur(24px);
+    border:1px solid var(--glass-edge);
     border-radius:999px;
+    box-shadow:0 8px 24px rgba(0,0,0,0.10);
   }
   .tabbar button{
     flex:1;
+    min-width:0;
     background:none;
     border:none;
     display:flex;
     flex-direction:column;
     align-items:center;
-    gap:2px;
+    gap:3px;
     color:var(--text-muted);
-    font-size:10px;
+    font-size:9px;
+    letter-spacing:-0.15px;
+    white-space:nowrap;
     font-weight:600;
-    padding:7px 2px 6px;
+    padding:7px 1px 6px;
     border-radius:999px;
     cursor:pointer;
   }
-  .tabbar button.active{color:var(--accent); background:#161618;}
+  .tabbar button.active{color:var(--accent); background:rgba(120,120,128,0.30);}
 
   /* Today */
   .hero-type{
@@ -681,9 +701,10 @@
     gap:12px;
     padding:10px 10px 10px 20px;
     border-radius:999px;
-    background:var(--glass);
-    -webkit-backdrop-filter:saturate(180%) blur(20px);
-    backdrop-filter:saturate(180%) blur(20px);
+    background:var(--glass-bar);
+    -webkit-backdrop-filter:saturate(200%) blur(24px);
+    backdrop-filter:saturate(200%) blur(24px);
+    border:1px solid var(--glass-edge);
     box-shadow:0 10px 30px rgba(0,0,0,0.55);
     font-size:19px;
     font-weight:600;
@@ -1820,7 +1841,13 @@ async function broadcastRequest(body){
 function broadcastBody(){
   return { text: broadcastText, photo: broadcastPhoto ? BROADCAST_PHOTO : '' };
 }
+function autoGrow(el){
+  if (!el) return;
+  el.style.height = 'auto';
+  el.style.height = el.scrollHeight + 'px';
+}
 function editBroadcast(value){
+  autoGrow(document.getElementById('bc-input'));
   broadcastText = value;
   try { localStorage.setItem('broadcast-draft', value); } catch (e) {}
   const left = document.getElementById('bc-count');
@@ -2289,7 +2316,7 @@ function renderWorkout(){
       ${exercisesHtml}
     </div>
     <div class="row-2">
-      <button class="btn btn-outline" onclick="cancelWorkout()">Отмена</button>
+      <button class="btn btn-outline narrow" onclick="cancelWorkout()">Отмена</button>
       <button class="btn btn-primary" onclick="finishWorkout()">Завершить тренировку</button>
     </div>
   `;
@@ -2483,8 +2510,8 @@ function renderSettings(){
   const broadcastGroup = stats ? `
     <p class="section-title">Рассылка</p>
     <div class="card list">
-      <div class="row">
-        <textarea class="bc-text" rows="7" placeholder="Текст сообщения всем пользователям" oninput="editBroadcast(this.value)">${escapeHtml(broadcastText)}</textarea>
+      <div class="row bc-row">
+        <textarea class="bc-text" id="bc-input" rows="3" placeholder="Текст сообщения всем пользователям" oninput="editBroadcast(this.value)">${escapeHtml(broadcastText)}</textarea>
       </div>
       <button class="row" onclick="toggleBroadcastPhoto()">
         <span class="icon-sq" style="background:#DB34F2">${icon('pin')}</span>
@@ -2817,6 +2844,7 @@ function render(){
   ` : '';
   app.innerHTML = renderHeader() + (bare ? '' : renderTabBar(activeTab)) + banner + body + restBar;
   document.body.classList.toggle('resting', !!rest);
+  autoGrow(document.getElementById('bc-input'));
 }
 
 async function init(){
