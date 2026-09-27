@@ -53,7 +53,7 @@ function swaps(v){
   if (!v || typeof v !== 'object') return {};
   const out = {};
   for (const [key, name] of Object.entries(v)){
-    if (!/^[AB]:\d{1,2}$/.test(key)) continue;
+    if (!/^[ABC]:\d{1,2}$/.test(key)) continue;
     if (typeof name !== 'string' || !name || name.length > 80) continue;
     out[key] = name;
   }
@@ -70,7 +70,8 @@ function normalize(d){
     rest: rest(d.rest),
     weights: weights(d.weights),
     swaps: swaps(d.swaps),
-    goal: [2, 3, 4, 5].includes(d.goal) ? d.goal : 3
+    goal: [2, 3, 4, 5].includes(d.goal) ? d.goal : 3,
+    split: d.split === 3 ? 3 : 2
   };
 }
 

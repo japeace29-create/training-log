@@ -880,7 +880,11 @@ const DEFAULT_PROGRAM = {
     { name: 'Скручивания на блоке', sets: 3, repsMin: 15, repsMax: 20 }
   ]
 };
-const TYPE_LABELS = { A: 'Тренировка A', B: 'Тренировка B' };
+const TYPE_LABELS = { A: 'Тренировка A', B: 'Тренировка B', C: 'Тренировка C' };
+const SPLITS = { 2: ['A', 'B'], 3: ['A', 'B', 'C'] };
+function activeDays(){
+  return SPLITS[split] || SPLITS[2];
+}
 const TABS = [
   { id: 'today', label: 'Сегодня', icon: 'home' },
   { id: 'exercises', label: 'Упражнения', icon: 'dumbbell' },
@@ -1013,6 +1017,49 @@ const SLOTS = {
       { name: 'Скручивания лёжа', eq: 'none', role: 'core', avoid: ['back'] },
       { name: 'Боковая планка', eq: 'none', role: 'time' }
     ]}
+  ],
+  // Третий день для тех, кто ходит трижды в неделю: те же движения,
+  // но другими снарядами, чтобы нагрузка не повторялась один в один.
+  C: [
+    { variants: [
+      { name: 'Жим ногами в тренажёре', eq: 'gym', role: 'main' },
+      { name: 'Гоблет-присед с гантелью', eq: 'dumbbells', role: 'main', avoid: ['knees'] },
+      { name: 'Приседания на скамью', eq: 'none', role: 'main' }
+    ]},
+    { variants: [
+      { name: 'Жим в тренажёре от груди', eq: 'gym', role: 'main' },
+      { name: 'Жим гантелей лёжа на полу', eq: 'dumbbells', role: 'main' },
+      { name: 'Отжимания', eq: 'none', role: 'main', avoid: ['beginner','bmi','caution','shoulders'] },
+      { name: 'Отжимания от опоры', eq: 'none', role: 'main' }
+    ]},
+    { variants: [
+      { name: 'Тяга верхнего блока', eq: 'gym', role: 'main' },
+      { name: 'Тяга гантели в наклоне с опорой', eq: 'dumbbells', role: 'main' },
+      { name: 'Тяга рюкзака в наклоне', eq: 'none', role: 'main' }
+    ]},
+    { variants: [
+      { name: 'Тяга к лицу на блоке', eq: 'gym', role: 'iso' },
+      { name: 'Разведение гантелей в стороны', eq: 'dumbbells', role: 'iso', avoid: ['shoulders'] },
+      { name: 'Y-подъёмы лёжа', eq: 'none', role: 'iso' }
+    ]},
+    { stage: 2, variants: [
+      { name: 'Сгибание ног в тренажёре', eq: 'gym', role: 'iso' },
+      { name: 'Румынская тяга с гантелями', eq: 'dumbbells', role: 'iso', avoid: ['back'] },
+      { name: 'Сгибание ног на полотенце', eq: 'none', role: 'iso' }
+    ]},
+    { stage: 3, variants: [
+      { name: 'Подъём гантелей на бицепс', eq: 'dumbbells', role: 'iso' },
+      { name: 'Разгибание рук на блоке', eq: 'gym', role: 'iso' },
+      { name: 'Подъём на бицепс с рюкзаком', eq: 'none', role: 'iso' }
+    ]},
+    { variants: [
+      { name: 'Мёртвый жук', eq: 'none', role: 'core' },
+      { name: 'Птица-собака', eq: 'none', role: 'core' }
+    ]},
+    { stage: 2, variants: [
+      { name: 'Боковая планка', eq: 'none', role: 'time' },
+      { name: 'Планка', eq: 'none', role: 'time' }
+    ]}
   ]
 };
 const REPS = {
@@ -1131,6 +1178,7 @@ function stripLoginParam(){
 let botName = '';
 let loginError = '';
 let loadError = '';
+let split = 2;             // два дня (A/B) или три (A/B/C)
 let weekGoal = 3;          // сколько тренировок в неделю хотим
 let swaps = {};            // выбранные вручную упражнения: { 'A:3': 'Отжимания' }
 let swapOpen = null;       // у какого слота открыт список замен
@@ -1195,7 +1243,9 @@ function formatDateRu(dateStr){
   return s.charAt(0).toUpperCase()+s.slice(1);
 }
 function nextType(){
-  return sessions.length % 2 === 0 ? 'A' : 'B';
+  const days = activeDays();
+  const last = sessions.length ? sessions[sessions.length - 1].type : null;
+  return days[(days.indexOf(last) + 1) % days.length];
 }
 function todaysSession(){
   return sessions.find(s => s.date === todayStr());
@@ -1357,7 +1407,7 @@ function buildProgram(p, doneCount){
   const reps = REPS[tags.has('caution') ? 'health' : p.goal];
   const stage = stageInfo(p, doneCount);
   const result = {};
-  ['A', 'B'].forEach(type => {
+  activeDays().forEach(type => {
     const used = new Set();
     result[type] = SLOTS[type]
       .map((slot, index) => ({ slot, index }))
@@ -1538,6 +1588,7 @@ function writeCache(pending){
       weights,
       swaps,
       goal: weekGoal,
+      split,
       draft: activeType && draft ? { type: activeType, exercises: draft, date: draftDate, note: draftNote } : null,
       pending: !!pending,
       at: Date.now()
@@ -1556,6 +1607,7 @@ function applyData(data){
   weights = Array.isArray(data.weights) ? data.weights : [];
   swaps = (data.swaps && typeof data.swaps === 'object') ? data.swaps : {};
   weekGoal = WEEK_GOALS.includes(data.goal) ? data.goal : 3;
+  split = SPLITS[data.split] ? data.split : 2;
   // У тех, кто заводил профиль до истории веса, первая точка — из теста.
   if (!weights.length && profile && profile.weight){
     weights = [{ date: profile.date || todayStr(), kg: Number(profile.weight) }];
@@ -1597,6 +1649,7 @@ function mergeData(local, remote){
     rest: local.rest || remote.rest,
     swaps: local.swaps || remote.swaps,
     goal: local.goal || remote.goal,
+    split: local.split || remote.split,
     draft: local.draft || remote.draft
   };
 }
@@ -1616,7 +1669,8 @@ async function loadAll(){
       rest: (data.rest && typeof data.rest === 'object') ? data.rest : null,
       weights: Array.isArray(data.weights) ? data.weights : [],
       swaps: (data.swaps && typeof data.swaps === 'object') ? data.swaps : {},
-      goal: data.goal
+      goal: data.goal,
+      split: data.split
     };
   }catch(e){
     console.error('Load error', e);
@@ -1661,6 +1715,7 @@ async function sendSave(){
         weights,
         swaps,
         goal: weekGoal,
+        split,
         draft: activeType && draft ? { type: activeType, exercises: draft, date: draftDate, note: draftNote } : null
       })
     });
@@ -1947,6 +2002,13 @@ function weekStats(){
     cursor.setDate(cursor.getDate() - 7);
   }
   return { goal: weekGoal, done, streak, left: Math.max(0, weekGoal - done) };
+}
+function setSplit(value){
+  if (!SPLITS[value]) return;
+  split = value;
+  if (profile) program = buildProgram(profile);
+  render();
+  saveAll();
 }
 function setWeekGoal(value){
   weekGoal = value;
@@ -2455,7 +2517,7 @@ function startWorkout(type, prefill){
 function editSession(date){
   const entry = sessions.find(s => s.date === date);
   if (!entry) return;
-  const inProgram = [...(program.A || []), ...(program.B || [])];
+  const inProgram = activeDays().flatMap(type => program[type] || []);
   activeType = entry.type;
   draftDate = date === todayStr() ? null : date;
   draftNote = entry.note || '';
@@ -2679,8 +2741,7 @@ function workoutSummary(list){
 function renderToday(){
   const done = todaysSession();
   const type = done ? done.type : nextType();
-  const countA = sessions.filter(s => s.type === 'A').length;
-  const countB = sessions.filter(s => s.type === 'B').length;
+  const byType = activeDays().map(t => sessions.filter(s => s.type === t).length + t).join(' / ');
 
   let heroHtml;
   if (done){
@@ -2743,7 +2804,7 @@ function renderToday(){
       <div class="stats">
         <div class="stat"><div class="num">${week.done}<span class="num-of">из ${week.goal}</span></div><div class="lbl">на этой неделе</div></div>
         <div class="stat"><div class="num">${week.streak}</div><div class="lbl">${week.streak ? plural(week.streak, ['неделя подряд', 'недели подряд', 'недель подряд']) : 'недель подряд'}</div></div>
-        <div class="stat"><div class="num">${sessions.length}</div><div class="lbl">всего · ${countA}A / ${countB}B</div></div>
+        <div class="stat"><div class="num">${sessions.length}</div><div class="lbl">всего · ${byType}</div></div>
       </div>
       <p class="week-note">${week.left === 0
         ? 'Цель недели закрыта. ' + (week.streak > 1 ? 'Серия продолжается.' : 'Первая неделя в серии.')
@@ -2867,8 +2928,7 @@ function renderExercises(){
     </div>
   `;
   return `
-    ${section('Тренировка A', program.A)}
-    ${section('Тренировка B', program.B)}
+    ${activeDays().map(type => section(TYPE_LABELS[type], program[type])).join('')}
     <p class="lib-note" style="margin-top:0;">«Видео» открывает поиск на YouTube по технике выполнения — выбери ролик, который понравится.</p>
   `;
 }
@@ -2943,6 +3003,19 @@ function renderSettings(){
       </div>
     </div>
     <p class="lib-note">${pref === 'auto' ? 'Как в системе телефона.' : pref === 'light' ? 'Светлая тема — всегда.' : 'Тёмная тема — всегда.'}</p>
+  `;
+  const splitGroup = `
+    <p class="section-title">Дни программы</p>
+    <div class="card list">
+      <div class="days">
+        ${Object.keys(SPLITS).map(n => `
+          <button class="${String(split) === n ? 'on' : ''}" onclick="setSplit(${n})">${SPLITS[n].join('/')}</button>
+        `).join('')}
+      </div>
+    </div>
+    <p class="lib-note">${split === 3
+      ? 'Три разных тренировки по кругу: A, B, C. Подходит, если ходите три раза в неделю.'
+      : 'Две тренировки по очереди: A, B. Классика для двух-трёх занятий в неделю.'}</p>
   `;
   const goalGroup = `
     <p class="section-title">Цель на неделю</p>
@@ -3111,6 +3184,7 @@ function renderSettings(){
   ` : '';
   return `
     ${themeGroup}
+    ${splitGroup}
     ${goalGroup}
     ${remindersGroup}
     ${restGroup}
@@ -3120,8 +3194,7 @@ function renderSettings(){
     ${accountGroup}
     <p class="section-title">Профиль</p>
     ${profileGroup}
-    ${section('Тренировка A', program.A)}
-    ${section('Тренировка B', program.B)}
+    ${activeDays().map(type => section(TYPE_LABELS[type], program[type])).join('')}
     <p class="lib-note" style="margin-top:0;">Подходы и повторения можно настроить под себя. Изменения применяются со следующей тренировки.</p>
     <div class="card list">
       <button class="row" onclick="resetProgramChoices()"><span class="row-body"><span class="row-label" style="color:var(--red)">${overridesResetArmed ? 'Точно сбросить? Нажми ещё раз' : 'Сбросить подходы и замены'}</span></span></button>
@@ -3168,7 +3241,8 @@ function renderHistory(){
 }
 
 function renderProgress(){
-  const all = [...program.A, ...program.B].filter((ex, i, arr) => arr.findIndex(e => e.name === ex.name) === i);
+  const all = activeDays().flatMap(type => program[type] || [])
+    .filter((ex, i, arr) => arr.findIndex(e => e.name === ex.name) === i);
   const rows = all.map(ex => {
     const perf = lastPerformance(ex.name);
     let val = '—';
@@ -3382,8 +3456,7 @@ function renderQuizResult(){
       <p class="quiz-sub" style="margin-bottom:0;">${optionLabel('level', a.level)} · ${optionLabel('place', a.place)} · ${bmiText(a)}</p>
       <ul class="notes">${planNotes(a).map(n => `<li>${n}</li>`).join('')}</ul>
     </div>
-    ${planGroup('A')}
-    ${planGroup('B')}
+    ${activeDays().map(planGroup).join('')}
     <p class="lib-note" style="margin-top:14px;">${remindersSummary(quiz.reminders)}</p>
     ${resetNote}
     <div class="row-2">
