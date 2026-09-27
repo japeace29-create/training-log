@@ -38,6 +38,14 @@
     --radius-s:10px;
     --font:-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
     --font-display:-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    /* Пятна фона: цвет и его плотность. Ночью они глубже и слабее. */
+    --glow-a:255 58 110;
+    --glow-a-o:0.20;
+    --glow-b:40 110 255;
+    --glow-b-o:0.22;
+    --glow-c:0 200 165;
+    --glow-c-o:0.14;
+    --glass:rgba(28,28,30,0.62);
     color-scheme:dark;
   }
   /* Светлая тема сделана по мотивам «Здоровья» в iOS 27: белые карточки
@@ -56,29 +64,29 @@
     --green-tint:#E8F7EC;
     --red:#FF3B30;
     --orange:#F08A00;
+    --glow-a:255 105 150;
+    --glow-a-o:0.36;
+    --glow-b:90 160 255;
+    --glow-b-o:0.34;
+    --glow-c:70 220 180;
+    --glow-c-o:0.30;
+    --glass:rgba(255,255,255,0.7);
     color-scheme:light;
   }
   :root[data-theme="light"] .card{
     box-shadow:0 1px 2px rgba(0,0,0,0.05), 0 12px 28px rgba(0,0,0,0.05);
   }
   :root[data-theme="light"] .tabbar{
-    background:rgba(255,255,255,0.7);
-    -webkit-backdrop-filter:saturate(180%) blur(20px);
-    backdrop-filter:saturate(180%) blur(20px);
     box-shadow:0 1px 2px rgba(0,0,0,0.05), 0 10px 24px rgba(0,0,0,0.06);
   }
   :root[data-theme="light"] .tabbar button.active{
     background:#FFFFFF;
     box-shadow:0 1px 3px rgba(0,0,0,0.14);
   }
+  :root[data-theme="dark"] .tabbar button.active{background:rgba(120,120,128,0.32);}
   :root[data-theme="light"] .set-row .done-toggle{border-color:rgba(60,60,67,0.28); color:var(--text);}
   :root[data-theme="light"] .banner{background:#FFF1DC; color:#8A5200;}
-  :root[data-theme="light"] .rest-bar{
-    background:rgba(255,255,255,0.86);
-    -webkit-backdrop-filter:saturate(180%) blur(20px);
-    backdrop-filter:saturate(180%) blur(20px);
-    box-shadow:0 10px 30px rgba(0,0,0,0.16);
-  }
+  :root[data-theme="light"] .rest-bar{box-shadow:0 10px 30px rgba(0,0,0,0.16);}
   :root[data-theme="light"] .rest-bar button{background:rgba(0,0,0,0.06);}
   :root[data-theme="light"] .rest-bar.done{color:#053D17;}
   :root[data-theme="light"] .day-sq.done{color:#FFFFFF;}
@@ -89,9 +97,8 @@
     z-index:-1;
     overflow:hidden;
     pointer-events:none;
-    opacity:0;
   }
-  :root[data-theme="light"] .aurora{opacity:1;}
+
   .aurora span{
     position:absolute;
     width:80vmax;
@@ -102,17 +109,17 @@
   }
   .aurora span:nth-child(1){
     top:-34vmax; left:-26vmax;
-    background:radial-gradient(circle, rgba(255,105,150,0.36) 0%, rgba(255,105,150,0) 68%);
+    background:radial-gradient(circle, rgb(var(--glow-a) / var(--glow-a-o)) 0%, rgb(var(--glow-a) / 0) 68%);
     animation:drift-a 36s ease-in-out infinite;
   }
   .aurora span:nth-child(2){
     top:-8vmax; right:-34vmax;
-    background:radial-gradient(circle, rgba(90,160,255,0.34) 0%, rgba(90,160,255,0) 68%);
+    background:radial-gradient(circle, rgb(var(--glow-b) / var(--glow-b-o)) 0%, rgb(var(--glow-b) / 0) 68%);
     animation:drift-b 44s ease-in-out infinite;
   }
   .aurora span:nth-child(3){
     bottom:-40vmax; left:-4vmax;
-    background:radial-gradient(circle, rgba(70,220,180,0.3) 0%, rgba(70,220,180,0) 68%);
+    background:radial-gradient(circle, rgb(var(--glow-c) / var(--glow-c-o)) 0%, rgb(var(--glow-c) / 0) 68%);
     animation:drift-c 40s ease-in-out infinite;
   }
   @keyframes drift-a{
@@ -367,7 +374,9 @@
     gap:2px;
     margin-bottom:16px;
     padding:4px;
-    background:var(--surface-2);
+    background:var(--glass);
+    -webkit-backdrop-filter:saturate(180%) blur(20px);
+    backdrop-filter:saturate(180%) blur(20px);
     border-radius:999px;
   }
   .tabbar button{
@@ -672,7 +681,9 @@
     gap:12px;
     padding:10px 10px 10px 20px;
     border-radius:999px;
-    background:var(--surface-3);
+    background:var(--glass);
+    -webkit-backdrop-filter:saturate(180%) blur(20px);
+    backdrop-filter:saturate(180%) blur(20px);
     box-shadow:0 10px 30px rgba(0,0,0,0.55);
     font-size:19px;
     font-weight:600;
