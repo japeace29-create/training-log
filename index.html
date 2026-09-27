@@ -506,6 +506,9 @@
     padding-left:8px;
     padding-right:8px;
   }
+  .hist-actions{display:flex; gap:10px; margin:12px 0 4px;}
+  .hist-actions .btn{flex:1; font-size:15px; padding:10px 14px;}
+  .hist-actions .danger{color:var(--red);}
   .record-line{
     margin:8px 0 0;
     font-size:13px;
@@ -1075,6 +1078,8 @@ let loadError = '';
 let swaps = {};            // выбранные вручную упражнения: { 'A:3': 'Отжимания' }
 let swapOpen = null;       // у какого слота открыт список замен
 let progressOpen = null;   // у какого упражнения раскрыт график
+let draftDate = null;      // правим прошлую тренировку — её дата, иначе сегодня
+let deleteArmed = null;    // дата тренировки, удаление которой ждёт подтверждения
 let weights = [];          // история веса: [{ date, kg }]
 let weightError = '';
 let restCfg = null;        // настройки таймера отдыха
@@ -1470,7 +1475,7 @@ function writeCache(pending){
       rest: restCfg,
       weights,
       swaps,
-      draft: activeType && draft ? { type: activeType, exercises: draft } : null,
+      draft: activeType && draft ? { type: activeType, exercises: draft, date: draftDate } : null,
       pending: !!pending,
       at: Date.now()
     }));
@@ -1496,10 +1501,12 @@ function applyData(data){
   if (saved && program[saved.type] && Array.isArray(saved.exercises)){
     activeType = saved.type;
     draft = saved.exercises;
+    draftDate = saved.date || null;
     view = 'workout';
   } else {
     activeType = null;
     draft = null;
+    draftDate = null;
     // Бот умеет открыть приложение сразу на нужной вкладке.
     const wanted = new URLSearchParams(location.search).get('tab');
     view = TABS.some(t => t.id === wanted) ? wanted : 'today';
@@ -1585,7 +1592,7 @@ async function sendSave(){
         rest: restCfg,
         weights,
         swaps,
-        draft: activeType && draft ? { type: activeType, exercises: draft } : null
+        draft: activeType && draft ? { type: activeType, exercises: draft, date: draftDate } : null
       })
     });
     if (res.status === 401){
@@ -2242,6 +2249,7 @@ function swapList(type, slotIndex, current){
 }
 function startWorkout(type, prefill){
   activeType = type;
+  draftDate = null;
   draft = program[type].map(ex => {
     const prev = prefill && prefill.exercises.find(e => e.name === ex.name);
     return draftExercise(ex, prev);
@@ -2250,9 +2258,46 @@ function startWorkout(type, prefill){
   render();
   saveAll();
 }
+// Правим то, что записано, а не сегодняшнюю программу: в прошлой тренировке
+// могли быть другие упражнения — терять их нельзя.
+function editSession(date){
+  const entry = sessions.find(s => s.date === date);
+  if (!entry) return;
+  const inProgram = [...(program.A || []), ...(program.B || [])];
+  activeType = entry.type;
+  draftDate = date === todayStr() ? null : date;
+  draft = entry.exercises.map(ex => {
+    const known = inProgram.find(e => e.name === ex.name);
+    return {
+      name: ex.name,
+      target: known ? targetText(getConfig(known)) : '',
+      isTime: !!ex.isTime,
+      slot: known ? known.slot : null,
+      advice: null,
+      sets: ex.sets.map(set => ({ value1: set.value1 === '0' ? '' : set.value1, value2: set.value2 === '0' ? '' : set.value2, done: !!set.done }))
+    };
+  });
+  deleteArmed = null;
+  view = 'workout';
+  render();
+  window.scrollTo(0, 0);
+}
 function editToday(){
-  const s = todaysSession();
-  if (s) startWorkout(s.type, s);
+  editSession(todayStr());
+}
+async function deleteSession(date){
+  if (deleteArmed !== date){
+    deleteArmed = date;
+    render();
+    setTimeout(() => { if (deleteArmed === date){ deleteArmed = null; render(); } }, 4000);
+    return;
+  }
+  deleteArmed = null;
+  sessions = sessions.filter(s => s.date !== date);
+  // Количество тренировок задаёт этап и очередь A/B — программу пересобираем.
+  if (profile) program = buildProgram(profile);
+  render();
+  await saveAll();
 }
 function resumeWorkout(){
   view = 'workout';
@@ -2260,12 +2305,15 @@ function resumeWorkout(){
 }
 async function cancelWorkout(){
   stopRest();
-  activeType = null; draft = null; view = 'today'; render();
+  const edited = draftDate;
+  activeType = null; draft = null; draftDate = null;
+  view = edited ? 'history' : 'today';
+  render();
   await saveAll();
 }
 async function finishWorkout(){
   const entry = {
-    date: todayStr(),
+    date: draftDate || todayStr(),
     type: activeType,
     exercises: draft.map(ex => ({
       name: ex.name,
@@ -2277,7 +2325,9 @@ async function finishWorkout(){
   sessions = sessions.filter(s => s.date !== entry.date);
   sessions.push(entry);
   sessions.sort((a,b) => a.date.localeCompare(b.date));
-  activeType = null; draft = null; view = 'today';
+  const edited = draftDate;
+  activeType = null; draft = null; draftDate = null;
+  view = edited ? 'history' : 'today';
   if (profile) program = buildProgram(profile);
   await saveAll();
   render();
@@ -2531,12 +2581,12 @@ function renderWorkout(){
 
   return `
     <div class="card">
-      <p class="eyebrow">${TYPE_LABELS[activeType]}</p>
+      <p class="eyebrow">${TYPE_LABELS[activeType]}${draftDate ? ' · ' + dayText(draftDate) : ''}</p>
       ${exercisesHtml}
     </div>
     <div class="row-2">
       <button class="btn btn-outline narrow" onclick="cancelWorkout()">Отмена</button>
-      <button class="btn btn-primary" onclick="finishWorkout()">Завершить тренировку</button>
+      <button class="btn btn-primary" onclick="finishWorkout()">${draftDate ? 'Сохранить' : 'Завершить тренировку'}</button>
     </div>
   `;
 }
@@ -2803,7 +2853,7 @@ function renderHistory(){
     const exHtml = s.exercises.map(ex => {
       const sets = filledSets(ex);
       if (!sets.length) return '';
-      const txt = sets.map(st => ex.isTime ? (st.value1+'сек') : (st.value1+'кг×'+st.value2)).join(', ');
+      const txt = sets.map(st => ex.isTime ? (st.value1 + 'сек') : (kgText(st.value1) + 'кг×' + st.value2)).join(', ');
       return `<div class="hist-ex"><b>${ex.name}</b><br><span class="sets-txt">${txt}</span></div>`;
     }).join('') || '<div class="hist-ex"><span class="sets-txt">Ничего не записано</span></div>';
     return `
@@ -2812,7 +2862,13 @@ function renderHistory(){
           <span>${formatDateRu(s.date)}</span>
           <span class="row-value">Тип ${s.type}${icon('chevron')}</span>
         </summary>
-        <div class="hist-body">${exHtml}</div>
+        <div class="hist-body">
+          ${exHtml}
+          <div class="hist-actions">
+            <button class="btn btn-outline" onclick="editSession('${s.date}')">Изменить</button>
+            <button class="btn btn-outline danger" onclick="deleteSession('${s.date}')">${deleteArmed === s.date ? 'Точно удалить?' : 'Удалить'}</button>
+          </div>
+        </div>
       </details>
     `;
   }).join('');
