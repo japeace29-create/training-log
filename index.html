@@ -472,6 +472,33 @@
     align-items:flex-start;
     gap:10px;
   }
+  .ex-actions{display:flex; flex-direction:column; gap:6px; align-items:flex-end;}
+  .swap-list{
+    display:flex;
+    flex-direction:column;
+    gap:6px;
+    margin:10px 0 12px;
+  }
+  .swap-option{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+    width:100%;
+    padding:11px 14px;
+    border:none;
+    border-radius:14px;
+    background:var(--surface-2);
+    color:var(--text);
+    font:inherit;
+    font-size:15px;
+    text-align:left;
+    cursor:pointer;
+  }
+  .swap-option.on{background:var(--green-tint);}
+  .swap-option.auto{color:var(--accent); justify-content:center; font-weight:600;}
+  .swap-eq{display:block; font-size:12px; color:var(--text-muted); margin-top:2px;}
+  .swap-note{font-size:13px; color:var(--text-muted); margin:8px 0 12px;}
   .video-btn{
     flex:0 0 auto;
     display:inline-flex;
@@ -485,6 +512,9 @@
     padding:6px 11px;
     text-decoration:none;
     white-space:nowrap;
+    border:none;
+    font-family:inherit;
+    cursor:pointer;
   }
   .video-btn .ico{width:11px; height:11px; fill:currentColor; stroke:none;}
   .exercise .advice{
@@ -1018,6 +1048,8 @@ const TG_INIT_DATA = new URLSearchParams(location.hash.slice(1)).get('tgWebAppDa
 let botName = '';
 let loginError = '';
 let loadError = '';
+let swaps = {};            // выбранные вручную упражнения: { 'A:3': 'Отжимания' }
+let swapOpen = null;       // у какого слота открыт список замен
 let weights = [];          // история веса: [{ date, kg }]
 let weightError = '';
 let restCfg = null;        // настройки таймера отдыха
@@ -1236,14 +1268,19 @@ function buildProgram(p, doneCount){
   ['A', 'B'].forEach(type => {
     const used = new Set();
     result[type] = SLOTS[type]
-      .filter(slot => (slot.stage || 1) <= stage.slots)
-      .map(slot => {
+      .map((slot, index) => ({ slot, index }))
+      .filter(({ slot }) => (slot.stage || 1) <= stage.slots)
+      .map(({ slot, index }) => {
         const fits = slot.variants.filter(v => EQ_RANK[v.eq] <= rank && !used.has(v.name));
-        const v = fits.find(v => !(v.avoid || []).some(t => tags.has(t))) || fits[fits.length - 1];
+        // Выбор человека важнее автоматического: он видит зал своими глазами.
+        const picked = swaps[type + ':' + index];
+        const v = (picked && slot.variants.find(x => x.name === picked && !used.has(x.name)))
+          || fits.find(v => !(v.avoid || []).some(t => tags.has(t)))
+          || fits[fits.length - 1];
         used.add(v.name);
         let [repsMin, repsMax] = reps[v.role];
         if (v.role === 'main' && repsMin < 8 && (tags.has('senior') || tags.has('young'))) [repsMin, repsMax] = [8, 10];
-        return { name: v.name, sets: setsFor(v.role, tags, p, stage), repsMin, repsMax, isTime: v.role === 'time' };
+        return { name: v.name, sets: setsFor(v.role, tags, p, stage), repsMin, repsMax, isTime: v.role === 'time', type, slot: index };
       });
   });
   return result;
@@ -1407,6 +1444,7 @@ function writeCache(pending){
       reminders,
       rest: restCfg,
       weights,
+      swaps,
       draft: activeType && draft ? { type: activeType, exercises: draft } : null,
       pending: !!pending,
       at: Date.now()
@@ -1423,6 +1461,7 @@ function applyData(data){
   reminders = (data.reminders && typeof data.reminders === 'object') ? data.reminders : null;
   restCfg = (data.rest && typeof data.rest === 'object') ? data.rest : DEFAULT_REST();
   weights = Array.isArray(data.weights) ? data.weights : [];
+  swaps = (data.swaps && typeof data.swaps === 'object') ? data.swaps : {};
   // У тех, кто заводил профиль до истории веса, первая точка — из теста.
   if (!weights.length && profile && profile.weight){
     weights = [{ date: profile.date || todayStr(), kg: Number(profile.weight) }];
@@ -1458,6 +1497,7 @@ function mergeData(local, remote){
     profile: local.profile || remote.profile,
     reminders: local.reminders || remote.reminders,
     rest: local.rest || remote.rest,
+    swaps: local.swaps || remote.swaps,
     draft: local.draft || remote.draft
   };
 }
@@ -1475,7 +1515,8 @@ async function loadAll(){
       draft: data.draft || null,
       reminders: (data.reminders && typeof data.reminders === 'object') ? data.reminders : null,
       rest: (data.rest && typeof data.rest === 'object') ? data.rest : null,
-      weights: Array.isArray(data.weights) ? data.weights : []
+      weights: Array.isArray(data.weights) ? data.weights : [],
+      swaps: (data.swaps && typeof data.swaps === 'object') ? data.swaps : {}
     };
   }catch(e){
     console.error('Load error', e);
@@ -1518,6 +1559,7 @@ async function sendSave(){
         reminders,
         rest: restCfg,
         weights,
+        swaps,
         draft: activeType && draft ? { type: activeType, exercises: draft } : null
       })
     });
@@ -2012,7 +2054,7 @@ function updateOverride(name, field, value){
 async function commitOverrides(){
   await saveAll();
 }
-async function resetOverrides(){
+async function resetProgramChoices(){
   if (!overridesResetArmed){
     overridesResetArmed = true;
     render();
@@ -2020,29 +2062,80 @@ async function resetOverrides(){
     return;
   }
   overrides = {};
+  swaps = {};
+  if (profile) program = buildProgram(profile);
   await saveAll();
   overridesResetArmed = false;
   render();
 }
 
+const EQ_LABELS = { gym: 'зал', dumbbells: 'гантели', none: 'без инвентаря' };
+// Что ещё умеет заменить это движение: то же место в тренировке, но другой снаряд.
+function alternatives(type, slotIndex){
+  const slot = SLOTS[type] && SLOTS[type][slotIndex];
+  if (!slot) return [];
+  const rank = EQ_RANK[(profile && profile.place) || 'gym'];
+  const busy = new Set((program[type] || []).filter(ex => ex.slot !== slotIndex).map(ex => ex.name));
+  return slot.variants.filter(v => EQ_RANK[v.eq] <= rank && !busy.has(v.name));
+}
+function toggleSwap(key){
+  swapOpen = swapOpen === key ? null : key;
+  render();
+}
+function draftExercise(ex, prev){
+  const cfg = getConfig(ex);
+  const advice = weightAdvice(cfg, profile, todayStr());
+  const suggested = advice && advice.weight ? String(advice.weight) : '';
+  return {
+    name: ex.name,
+    target: targetText(cfg),
+    isTime: !!ex.isTime,
+    slot: ex.slot,
+    advice,
+    sets: Array.from({length: cfg.sets}, (_, i) => ({
+      value1: prev && prev.sets[i] ? prev.sets[i].value1 : (prev ? '' : suggested),
+      value2: prev && prev.sets[i] ? prev.sets[i].value2 : '',
+      done: prev && prev.sets[i] ? prev.sets[i].done : false
+    }))
+  };
+}
+function chooseSwap(type, slotIndex, name){
+  const key = type + ':' + slotIndex;
+  if (name) swaps[key] = name;
+  else delete swaps[key];
+  program = buildProgram(profile);
+  // Если замена случилась посреди тренировки, переделываем только это упражнение.
+  if (activeType === type && draft){
+    const ex = program[type].find(e => e.slot === slotIndex);
+    const at = draft.findIndex(e => e.slot === slotIndex);
+    if (ex && at >= 0) draft[at] = draftExercise(ex);
+  }
+  swapOpen = null;
+  render();
+  saveAll();
+}
+function swapList(type, slotIndex, current){
+  const key = type + ':' + slotIndex;
+  if (swapOpen !== key) return '';
+  const options = alternatives(type, slotIndex);
+  if (options.length < 2) return '<p class="swap-note">Для этого движения замен нет.</p>';
+  return `
+    <div class="swap-list">
+      ${options.map(v => `
+        <button class="swap-option ${v.name === current ? 'on' : ''}" onclick="chooseSwap('${type}',${slotIndex},'${v.name.replace(/'/g, "\\'")}')">
+          <span>${v.name}<span class="swap-eq">${EQ_LABELS[v.eq]}</span></span>
+          ${v.name === current ? `<span class="check">${icon('check')}</span>` : ''}
+        </button>
+      `).join('')}
+      ${swaps[key] ? `<button class="swap-option auto" onclick="chooseSwap('${type}',${slotIndex},'')">Выбрать за меня</button>` : ''}
+    </div>
+  `;
+}
 function startWorkout(type, prefill){
   activeType = type;
   draft = program[type].map(ex => {
-    const cfg = getConfig(ex);
     const prev = prefill && prefill.exercises.find(e => e.name === ex.name);
-    const advice = weightAdvice(cfg, profile, todayStr());
-    const suggested = advice && advice.weight ? String(advice.weight) : '';
-    return {
-      name: ex.name,
-      target: targetText(cfg),
-      isTime: !!ex.isTime,
-      advice,
-      sets: Array.from({length: cfg.sets}, (_, i) => ({
-        value1: prev && prev.sets[i] ? prev.sets[i].value1 : (prev ? '' : suggested),
-        value2: prev && prev.sets[i] ? prev.sets[i].value2 : '',
-        done: prev && prev.sets[i] ? prev.sets[i].done : false
-      }))
-    };
+    return draftExercise(ex, prev);
   });
   view = 'workout';
   render();
@@ -2301,8 +2394,12 @@ function renderWorkout(){
             <h3>${ex.name}</h3>
             <p class="target">${ex.target}</p>
           </div>
-          <a class="video-btn" href="${videoSearchUrl(ex.name)}" target="_blank" rel="noopener">${icon('play')}Видео</a>
+          <div class="ex-actions">
+            ${ex.slot != null ? `<button class="video-btn" onclick="toggleSwap('${activeType}:${ex.slot}')">${icon('stairs')}Заменить</button>` : ''}
+            <a class="video-btn" href="${videoSearchUrl(ex.name)}" target="_blank" rel="noopener">${icon('play')}Видео</a>
+          </div>
         </div>
+        ${ex.slot != null ? swapList(activeType, ex.slot, ex.name) : ''}
         <p class="last-time">${hintText(perf)}</p>
         ${adviceHtml}
         ${setsHtml}
@@ -2336,8 +2433,12 @@ function renderExercises(){
               <div class="target">${targetText(cfg)}, ${cfg.sets} подхода</div>
               ${adv && adv.weight ? `<div class="lib-advice">Рекомендуемый вес: ${loadLabel(ex.name, adv.weight)}</div>` : ''}
             </div>
-            <a class="video-btn" href="${videoSearchUrl(ex.name)}" target="_blank" rel="noopener">${icon('play')}Видео</a>
+            <div class="ex-actions">
+              ${ex.slot != null ? `<button class="video-btn" onclick="toggleSwap('${ex.type}:${ex.slot}')">${icon('stairs')}Заменить</button>` : ''}
+              <a class="video-btn" href="${videoSearchUrl(ex.name)}" target="_blank" rel="noopener">${icon('play')}Видео</a>
+            </div>
           </div>
+          ${ex.slot != null ? swapList(ex.type, ex.slot, ex.name) : ''}
         `;
       }).join('')}
     </div>
@@ -2561,7 +2662,7 @@ function renderSettings(){
     ${section('Тренировка B', program.B)}
     <p class="lib-note" style="margin-top:0;">Подходы и повторения можно настроить под себя. Изменения применяются со следующей тренировки.</p>
     <div class="card list">
-      <button class="row" onclick="resetOverrides()"><span class="row-body"><span class="row-label" style="color:var(--red)">${overridesResetArmed ? 'Точно сбросить? Нажми ещё раз' : 'Сбросить к значениям по умолчанию'}</span></span></button>
+      <button class="row" onclick="resetProgramChoices()"><span class="row-body"><span class="row-label" style="color:var(--red)">${overridesResetArmed ? 'Точно сбросить? Нажми ещё раз' : 'Сбросить подходы и замены'}</span></span></button>
     </div>
   `;
 }

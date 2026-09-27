@@ -48,6 +48,18 @@ function weights(list){
     .slice(-500);
 }
 
+// Выбранные вручную упражнения: ключ вида "A:3", значение — название.
+function swaps(v){
+  if (!v || typeof v !== 'object') return {};
+  const out = {};
+  for (const [key, name] of Object.entries(v)){
+    if (!/^[AB]:\d{1,2}$/.test(key)) continue;
+    if (typeof name !== 'string' || !name || name.length > 80) continue;
+    out[key] = name;
+  }
+  return out;
+}
+
 function normalize(d){
   return {
     sessions: Array.isArray(d.sessions) ? d.sessions : [],
@@ -56,7 +68,8 @@ function normalize(d){
     draft: d.draft || null,
     reminders: reminders(d.reminders),
     rest: rest(d.rest),
-    weights: weights(d.weights)
+    weights: weights(d.weights),
+    swaps: swaps(d.swaps)
   };
 }
 
