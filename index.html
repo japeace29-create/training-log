@@ -3351,7 +3351,10 @@ function toggleDone(exIdx, setIdx){
     if (record && !set.warmup && !set.drop && setScore(ex.isTime, set) > record.score) haptic();
     // Дропсет и первое упражнение пары делаются без паузы — таймер молчит.
     const next = ex.sets[setIdx + 1];
-    if (!(next && next.drop) && !pairedNext(exIdx)) startRest(ex.name);
+    // После последнего подхода отсчёт не нужен: дальше другое упражнение,
+    // до него ещё дойти и настроить снаряд — это и есть отдых.
+    const more = ex.sets.some((s, i) => i !== setIdx && !s.done);
+    if (more && !(next && next.drop) && !pairedNext(exIdx)) startRest(ex.name);
   }
   render();
   saveAll();
@@ -3869,7 +3872,7 @@ function renderSettings(){
       ` : ''}
     </div>
     <p class="lib-note">${restOn
-      ? 'Отсчёт начинается сам, когда отмечаете подход выполненным. Кнопка «Пропустить» обрывает его.'
+      ? 'Отсчёт начинается сам, когда отмечаете подход выполненным, — кроме последнего в упражнении: до следующего снаряда ещё дойти, это и есть пауза. Кнопка «Пропустить» обрывает отсчёт.'
       : 'Отсчёт между подходами не показывается.'}</p>
   `;
   const customForm = !customOpen || !customDraft ? '' : `
