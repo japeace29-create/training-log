@@ -608,10 +608,18 @@
     font-size:12px;
     color:var(--text-muted);
   }
-  /* Своё упражнение: название сверху, приметы под ним, «Убрать» справа. */
-  .custom-row .row-body{flex-direction:column; align-items:flex-start; justify-content:center; gap:2px;}
-  .custom-row .row-sub{font-size:13px; color:var(--text-muted);}
-  .custom-row .btn-ghost{white-space:nowrap; padding:0 18px 0 12px;}
+  /* Строка в два яруса: название сверху, приметы под ним, действие справа. */
+  .row-stack .row-body{flex-direction:column; align-items:flex-start; justify-content:center; gap:2px;}
+  .row-stack .row-sub{font-size:13px; color:var(--text-muted);}
+  .row-stack .btn-ghost{white-space:nowrap; padding:0 18px 0 12px;}
+  .bc-thumb{
+    width:44px;
+    height:44px;
+    flex:0 0 auto;
+    margin-right:12px;
+    border-radius:10px;
+    object-fit:cover;
+  }
   .text-input{
     width:100%;
     background:var(--surface-2);
@@ -1602,7 +1610,6 @@ let draft = null;
 let resetArmed = false;
 let overridesResetArmed = false;
 const BROADCAST_LIMIT = 1024;
-const BROADCAST_PHOTO = '/promo/reminders.png';
 const BROADCAST_DEFAULT = [
   '⏰ Дневник теперь напоминает о тренировках',
   '',
@@ -1621,7 +1628,14 @@ let broadcastText = (() => {
   try { const saved = localStorage.getItem('broadcast-draft'); return saved === null ? BROADCAST_DEFAULT : saved; }
   catch (e) { return BROADCAST_DEFAULT; }
 })();
-let broadcastPhoto = true;
+// Картинку к рассылке владелец выбирает сам. В Telegram она уже лежит,
+// поэтому храним только её file_id и маленькую миниатюру для показа.
+let broadcastPhotoId = '';
+let broadcastPhotoPreview = '';
+try {
+  const saved = JSON.parse(localStorage.getItem('broadcast-photo') || 'null');
+  if (saved && saved.id){ broadcastPhotoId = saved.id; broadcastPhotoPreview = saved.preview || ''; }
+} catch (e) {}
 let broadcastBusy = false;
 let broadcastArmed = false;
 let broadcastNote = '';
@@ -2647,7 +2661,7 @@ async function broadcastRequest(body){
   return data;
 }
 function broadcastBody(){
-  return { text: broadcastText, photo: broadcastPhoto ? BROADCAST_PHOTO : '' };
+  return { text: broadcastText, photo: broadcastPhotoId || '' };
 }
 function autoGrow(el){
   if (!el) return;
@@ -2664,8 +2678,51 @@ function editBroadcast(value){
 function broadcastCount(){
   return `${broadcastText.length} из ${BROADCAST_LIMIT} символов. Можно выделять <b>жирным</b> и <i>курсивом</i>.`;
 }
-function toggleBroadcastPhoto(){
-  broadcastPhoto = !broadcastPhoto;
+function readImage(file){
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => { URL.revokeObjectURL(url); resolve(img); };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Не удалось прочитать картинку')); };
+    img.src = url;
+  });
+}
+// Снимок экрана с телефона весит мегабайты, а в сообщении всё равно
+// показывается небольшим — ужимаем до отправки.
+function shrinkImage(img, max, quality){
+  const scale = Math.min(1, max / Math.max(img.width, img.height));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(img.width * scale));
+  canvas.height = Math.max(1, Math.round(img.height * scale));
+  canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+  return canvas.toDataURL('image/jpeg', quality);
+}
+async function pickBroadcastPhoto(input){
+  const file = input.files && input.files[0];
+  input.value = '';
+  if (!file) return;
+  broadcastBusy = true;
+  broadcastNote = '';
+  render();
+  try {
+    const img = await readImage(file);
+    const data = await broadcastRequest({ mode: 'photo', image: shrinkImage(img, 1280, 0.85) });
+    broadcastPhotoId = data.fileId;
+    broadcastPhotoPreview = shrinkImage(img, 240, 0.7);
+    try {
+      localStorage.setItem('broadcast-photo', JSON.stringify({ id: broadcastPhotoId, preview: broadcastPhotoPreview }));
+    } catch (e) { /* миниатюра не влезла в хранилище — не беда */ }
+    broadcastNote = 'Картинка приложена. Она же ушла вам в бот — посмотрите, как смотрится.';
+  } catch (e) {
+    broadcastNote = e.message;
+  }
+  broadcastBusy = false;
+  render();
+}
+function dropBroadcastPhoto(){
+  broadcastPhotoId = '';
+  broadcastPhotoPreview = '';
+  try { localStorage.removeItem('broadcast-photo'); } catch (e) {}
   render();
 }
 async function sendBroadcastTest(){
@@ -3904,7 +3961,7 @@ function renderSettings(){
     ${custom.length ? `
       <div class="card list">
         ${custom.map(c => `
-          <div class="row custom-row">
+          <div class="row row-stack">
             <span class="row-body">
               <span class="row-label">${escapeHtml(c.name)}</span>
               <span class="row-sub">День ${c.type} · ${c.group}${c.isTime ? ' · время' : ''}</span>
@@ -4000,13 +4057,22 @@ function renderSettings(){
       <div class="row bc-row">
         <textarea class="bc-text autogrow" id="bc-input" rows="3" placeholder="Текст сообщения всем пользователям" oninput="editBroadcast(this.value)">${escapeHtml(broadcastText)}</textarea>
       </div>
-      <button class="row" onclick="toggleBroadcastPhoto()">
-        <span class="icon-sq" style="background:#DB34F2">${icon('pin')}</span>
-        <span class="row-body">
-          <span class="row-label">Приложить картинку</span>
-          <span class="switch ${broadcastPhoto ? 'on' : ''}"></span>
-        </span>
-      </button>
+      ${broadcastPhotoId ? `
+        <div class="row row-stack">
+          ${broadcastPhotoPreview ? `<img class="bc-thumb" src="${broadcastPhotoPreview}" alt="">` : `<span class="icon-sq" style="background:#DB34F2">${icon('pin')}</span>`}
+          <span class="row-body">
+            <span class="row-label">Картинка</span>
+            <span class="row-sub">Уйдёт над текстом, текст станет подписью</span>
+          </span>
+          <button class="btn-ghost" style="color:var(--red)" onclick="dropBroadcastPhoto()">Убрать</button>
+        </div>
+      ` : `
+        <label class="row" style="cursor:pointer;">
+          <span class="icon-sq" style="background:#DB34F2">${icon('pin')}</span>
+          <span class="row-body"><span class="row-label accent">Приложить картинку</span></span>
+          <input type="file" accept="image/*" style="display:none" onchange="pickBroadcastPhoto(this)" ${broadcastBusy ? 'disabled' : ''}>
+        </label>
+      `}
     </div>
     <p class="lib-note" id="bc-count">${broadcastCount()}</p>
     ${progressLine}
@@ -4025,7 +4091,7 @@ function renderSettings(){
     ${bc && !bc.done ? `<div class="settings-link"><button class="btn-ghost" onclick="stopBroadcast()">Остановить</button></div>` : ''}
     <p class="lib-note" style="margin-top:12px;">${broadcastNote
       ? escapeHtml(broadcastNote)
-      : 'Сообщение уйдёт всем, кто открывал дневник. Сначала отправьте его себе.'}</p>
+      : 'Сообщение уйдёт всем, кто открывал дневник. Картинку выберите из галереи телефона — например, снимок нужного экрана. Сначала отправьте всё себе.'}</p>
   ` : '';
   const accountGroup = session ? `
     <p class="section-title">Аккаунт</p>

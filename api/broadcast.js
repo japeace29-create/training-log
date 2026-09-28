@@ -1,5 +1,5 @@
 const { kvCommand } = require('./_lib');
-const { userIdFromRequest, siteUrl, botRequest } = require('./_auth');
+const { userIdFromRequest, siteUrl, botRequest, botToken } = require('./_auth');
 
 const JOB_KEY = 'training-log:broadcast';
 const LOCK_KEY = 'training-log:broadcast-lock';
@@ -10,6 +10,9 @@ const TIME_BUDGET_MS = 8000;
 const PAUSE_MS = 50;      // ~20 сообщений в секунду при лимите Telegram в 30
 const MAX_RETRIES = 2;
 const TEXT_LIMIT = 1024;  // столько помещается в подпись к фотографии
+// Telegram берёт картинки до 10 МБ, но тело запроса к функции меньше,
+// да и приложение перед отправкой ужимает её до 1280 точек по длинной стороне.
+const IMAGE_LIMIT = 4 * 1024 * 1024;
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
@@ -49,11 +52,33 @@ function saveJob(job){
   return kvCommand(['SET', JOB_KEY, JSON.stringify(job), 'EX', 7 * 86400]);
 }
 
-function photoUrl(photo, site){
+function photoRef(photo, site){
   const s = String(photo || '').trim();
   if (!s) return null;
   if (s.startsWith('/')) return site + s;
-  return /^https:\/\/[^\s]+$/.test(s) ? s : null;
+  if (/^https:\/\/[^\s]+$/.test(s)) return s;
+  // После первой отправки Telegram выдаёт file_id — по нему ту же картинку
+  // можно слать дальше, ничего никуда не выкладывая.
+  return /^[A-Za-z0-9_-]{20,200}$/.test(s) ? s : null;
+}
+
+// Картинку из приложения сначала показываем владельцу: заодно Telegram
+// возвращает file_id, с которым рассылка идёт без обращений к нашему сайту.
+async function uploadPhoto(chatId, image, caption){
+  const base64 = String(image || '').replace(/^data:image\/[a-z+]+;base64,/, '').replace(/\s+/g, '');
+  if (!base64 || !/^[A-Za-z0-9+/=]+$/.test(base64)) throw new Error('Картинка не разобралась');
+  const bytes = Buffer.from(base64, 'base64');
+  if (!bytes.length) throw new Error('Картинка пустая');
+  if (bytes.length > IMAGE_LIMIT) throw new Error('Картинка тяжелее 4 МБ — уменьшите её');
+  const form = new FormData();
+  form.append('chat_id', String(chatId));
+  if (caption) form.append('caption', caption);
+  form.append('photo', new Blob([bytes], { type: 'image/jpeg' }), 'promo.jpg');
+  const res = await fetch('https://api.telegram.org/bot' + botToken() + '/sendPhoto', { method: 'POST', body: form });
+  const data = await res.json();
+  if (!data.ok) throw new Error('Telegram sendPhoto: ' + data.description);
+  const sizes = data.result && data.result.photo;
+  return sizes && sizes.length ? sizes[sizes.length - 1].file_id : null;
 }
 
 async function sendOne(chatId, job, site){
@@ -133,9 +158,27 @@ module.exports = async (req, res) => {
     const body = req.body || {};
     const mode = body.mode || 'test';
     const text = String(body.text || '').trim();
-    const photo = photoUrl(body.photo, site);
+    const photo = photoRef(body.photo, site);
     if (body.photo && !photo) {
-      res.status(400).json({ error: 'Ссылка на картинку должна начинаться с https:// или с /' });
+      res.status(400).json({ error: 'Непонятная картинка: приложите её заново' });
+      return;
+    }
+
+    // Приложили картинку: отправляем её владельцу и запоминаем file_id.
+    if (mode === 'photo') {
+      let fileId;
+      try {
+        fileId = await uploadPhoto(owner, body.image, 'Так картинка будет выглядеть в рассылке');
+      } catch (e) {
+        // Виновата картинка, а не сервер, поэтому 400 и понятный текст.
+        res.status(400).json({ error: String(e && e.message || e) });
+        return;
+      }
+      if (!fileId) {
+        res.status(400).json({ error: 'Telegram не принял картинку' });
+        return;
+      }
+      res.status(200).json({ fileId });
       return;
     }
 
