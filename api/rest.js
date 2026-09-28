@@ -2,7 +2,9 @@ const crypto = require('crypto');
 const { kvCommand } = require('./_lib');
 const { userIdFromRequest, botRequest, siteUrl } = require('./_auth');
 
-const QSTASH = 'https://qstash.upstash.io/v2/publish/';
+// У QStash теперь свой адрес на регион (европейский — qstash-eu-central-1),
+// поэтому берём его из переменной: консоль выдаёт её рядом с токеном.
+const QSTASH = (process.env.QSTASH_URL || 'https://qstash.upstash.io').replace(/\/+$/, '');
 const JOB_KEY = 'training-log:rest-job:';
 const ACTIVE_KEY = 'training-log:rest-active:';
 
@@ -22,7 +24,7 @@ async function schedule(req, userId, seconds, name) {
     kvCommand(['SET', ACTIVE_KEY + userId, job, 'EX', live])
   ]);
 
-  const res = await fetch(QSTASH + siteUrl(req) + '/api/rest-fire', {
+  const res = await fetch(QSTASH + '/v2/publish/' + siteUrl(req) + '/api/rest-fire', {
     method: 'POST',
     headers: {
       Authorization: 'Bearer ' + token,
