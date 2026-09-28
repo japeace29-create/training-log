@@ -2460,9 +2460,46 @@ function restClock(sec){
 // Отсчёт начинается сам, когда отмечаешь подход выполненным.
 function startRest(name){
   if (!restCfg || !restCfg.enabled) return;
-  rest = { endsAt: Date.now() + restCfg.seconds * 1000, name: name || '', done: false };
+  dropRestJob();
+  rest = { endsAt: Date.now() + restCfg.seconds * 1000, name: name || '', done: false, job: null, scheduled: false };
   clearInterval(restTicker);
   restTicker = setInterval(tickRest, 500);
+  if (restCfg.notify) orderRest(rest, name, restCfg.seconds);
+}
+// Просим сервер написать, когда отдых кончится. Тогда сообщение придёт,
+// даже если приложение свернули: телефон в этот момент может спать.
+async function orderRest(mine, name, seconds){
+  try {
+    const res = await fetch('/api/rest', {
+      method: 'POST',
+      headers: apiHeaders(),
+      body: JSON.stringify({ schedule: seconds, exercise: name || '' })
+    });
+    const data = await res.json().catch(() => ({}));
+    // Пока ходили за ответом, отдых могли прервать — тогда сразу отменяем.
+    if (rest !== mine || mine.done){
+      if (data.job) cancelRestJob(data.job);
+      return;
+    }
+    if (data.scheduled){
+      mine.job = data.job;
+      mine.scheduled = true;
+    }
+  } catch (e) { /* без связи останется старый путь: отправит сам телефон */ }
+}
+function cancelRestJob(job){
+  if (!job) return;
+  fetch('/api/rest', {
+    method: 'POST',
+    headers: apiHeaders(),
+    body: JSON.stringify({ cancel: job })
+  }).catch(() => {});
+}
+function dropRestJob(){
+  if (rest && rest.job && !rest.done){
+    cancelRestJob(rest.job);
+    rest.job = null;
+  }
 }
 // Полосу обновляем напрямую: полная перерисовка сбросила бы фокус с полей,
 // в которые человек в этот момент вписывает вес.
@@ -2478,12 +2515,14 @@ function tickRest(){
       bar.querySelector('button').textContent = 'Убрать';
     }
     haptic();
-    // Если вкладка «просыпается» спустя минуты, сообщение уже не нужно.
-    if (restCfg.notify && Date.now() - rest.endsAt < 60000) pingTelegram(rest.name);
+    // Если сообщение заказано на сервере, оно уже в пути. Иначе отправляем
+    // сами — но только если вкладка не «проснулась» спустя минуты.
+    if (restCfg.notify && !rest.scheduled && Date.now() - rest.endsAt < 60000) pingTelegram(rest.name);
   }
   if (rest.done && Date.now() - rest.endsAt > 5000) stopRest();
 }
 function stopRest(){
+  dropRestJob();
   clearInterval(restTicker);
   restTicker = null;
   rest = null;
@@ -2528,6 +2567,7 @@ function setRestSeconds(seconds){
   saveAll();
 }
 function toggleRestNotify(){
+  if (restCfg && restCfg.notify) dropRestJob();
   restCfg.notify = !restCfg.notify;
   render();
   saveAll();
