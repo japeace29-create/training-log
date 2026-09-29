@@ -120,13 +120,36 @@ module.exports = async (req, res) => {
     }
     const reply = (text, extra) => res.status(200).json({ method: 'sendMessage', chat_id: msg.chat.id, parse_mode: 'HTML', text, ...(extra || {}) });
 
+    // Обычный ответ на любое сообщение: кнопки входа и код на десять минут.
+    // lead — фраза перед ним, например причина, по которой не сработало приглашение.
+    const welcome = async lead => {
+      const [code, token] = await Promise.all([issueCode(msg.from), issueLink(msg.from)]);
+      res.status(200).json({
+        method: 'sendMessage',
+        chat_id: msg.chat.id,
+        parse_mode: 'HTML',
+        text: (lead ? String(lead).replace(/[&<>]/g, '') + '\n\n' : '') +
+          '<b>Дневник тренировок</b> — программа под вас, веса с учётом прогрессии и история.\n\n' +
+          '«Открыть дневник» — прямо здесь, в Telegram.\n\n' +
+          '«Открыть в браузере» — вход без кода. Оттуда дневник можно поставить иконкой на экран «Домой»: ' +
+          'меню «Поделиться» → «На экран „Домой"». Ссылка работает 10 минут.\n\n' +
+          'Если понадобится войти вручную — код <b>' + code + '</b>, он тоже на 10 минут.',
+        reply_markup: { inline_keyboard: [
+          [{ text: 'Открыть дневник', web_app: { url: site } }],
+          [{ text: 'Открыть в браузере', url: site + '?login=' + token }]
+        ] }
+      });
+    };
+
     // Ссылка-приглашение в вызов: t.me/бот?start=join_<код>.
     const invite = /^\/start(?:@\w+)?\s+join_([a-f0-9]{10})\s*$/.exec(msg.text || '');
     if (invite) {
       const hint = [msg.from.first_name, msg.from.last_name].filter(Boolean).join(' ') || msg.from.username || '';
       const joined = await compete.join(String(msg.from.id), invite[1], hint, site);
       if (joined.error) {
-        reply(joined.error);
+        // Человек мог прийти сюда впервые и только по этой ссылке: кроме причины
+        // отказа ему нужны и обычные кнопки, иначе он остаётся ни с чем.
+        await welcome(joined.error);
         return;
       }
       reply(`Вы приняли вызов «${joined.title.replace(/[&<>]/g, '')}». Записывайте результат в дневнике и присылайте видео: без него он не считается.`, {
@@ -174,21 +197,7 @@ module.exports = async (req, res) => {
       return;
     }
 
-    const [code, token] = await Promise.all([issueCode(msg.from), issueLink(msg.from)]);
-    res.status(200).json({
-      method: 'sendMessage',
-      chat_id: msg.chat.id,
-      parse_mode: 'HTML',
-      text: '<b>Дневник тренировок</b> — программа под вас, веса с учётом прогрессии и история.\n\n' +
-        '«Открыть дневник» — прямо здесь, в Telegram.\n\n' +
-        '«Открыть в браузере» — вход без кода. Оттуда дневник можно поставить иконкой на экран «Домой»: ' +
-        'меню «Поделиться» → «На экран „Домой"». Ссылка работает 10 минут.\n\n' +
-        'Если понадобится войти вручную — код <b>' + code + '</b>, он тоже на 10 минут.',
-      reply_markup: { inline_keyboard: [
-        [{ text: 'Открыть дневник', web_app: { url: site } }],
-        [{ text: 'Открыть в браузере', url: site + '?login=' + token }]
-      ] }
-    });
+    await welcome();
   } catch (e) {
     console.error(e);
     res.status(200).end();
