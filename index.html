@@ -1630,6 +1630,12 @@ let customOpen = false;    // открыта форма добавления
 let customDraft = null;    // что набрано в форме
 let customError = '';
 let customArmed = null;    // удаление своего упражнения ждёт подтверждения
+// Разгрузочная неделя: вес мягче и подходов меньше, потом всё как было.
+const DELOAD_LOAD = 0.85;
+const DELOAD_DAYS = 7;
+const DELOAD_WEEKS = { beginner: 10, intermediate: 7, advanced: 6 };
+let deload = null;         // { start, end, why, snooze } — идущая или отложенная разгрузка
+let draftDeload = false;   // тренировка, которую ведём сейчас, разгрузочная
 let orderMode = false;     // экран «Порядок и состав» внутри тренировки
 let addOpen = false;       // открыт выбор упражнения, которое добавляем на сегодня
 let addQuery = '';
@@ -1734,6 +1740,9 @@ function filledSets(ex){
 function lastPerformance(name, before){
   for (let i = sessions.length - 1; i >= 0; i--){
     if (before && sessions[i].date >= before) continue;
+    // Облегчённая неделя не ориентир: после неё рекомендации возвращаются
+    // к обычным весам, а не застревают на лёгких.
+    if (sessions[i].deload) continue;
     const ex = sessions[i].exercises.find(e => e.name === name);
     const sets = ex ? filledSets(ex) : [];
     if (sets.length) return { date: sessions[i].date, sets, isTime: ex.isTime };
@@ -2088,7 +2097,8 @@ function writeCache(pending){
       custom,
       advanced,
       pairs,
-      draft: activeType && draft ? { type: activeType, exercises: draft, date: draftDate, note: draftNote } : null,
+      deload,
+      draft: activeType && draft ? { type: activeType, exercises: draft, date: draftDate, note: draftNote, deload: draftDeload } : null,
       pending: !!pending,
       at: Date.now()
     }));
@@ -2106,6 +2116,7 @@ function applyData(data){
   weights = Array.isArray(data.weights) ? data.weights : [];
   swaps = (data.swaps && typeof data.swaps === 'object') ? data.swaps : {};
   custom = Array.isArray(data.custom) ? data.custom : [];
+  deload = (data.deload && typeof data.deload === 'object') ? data.deload : null;
   advanced = typeof data.advanced === 'boolean' ? data.advanced : null;
   pairs = (data.pairs && typeof data.pairs === 'object') ? data.pairs : {};
   weekGoal = WEEK_GOALS.includes(data.goal) ? data.goal : 3;
@@ -2121,12 +2132,14 @@ function applyData(data){
     draft = saved.exercises;
     draftDate = saved.date || null;
     draftNote = saved.note || '';
+    draftDeload = !!saved.deload;
     view = 'workout';
   } else {
     activeType = null;
     draft = null;
     draftDate = null;
     draftNote = '';
+    draftDeload = false;
     // Бот умеет открыть приложение сразу на нужной вкладке.
     const wanted = new URLSearchParams(location.search).get('tab');
     view = TABS.some(t => t.id === wanted) ? wanted : 'today';
@@ -2151,6 +2164,7 @@ function mergeData(local, remote){
     rest: local.rest || remote.rest,
     swaps: local.swaps || remote.swaps,
     custom: local.custom || remote.custom,
+    deload: local.deload || remote.deload,
     advanced: local.advanced != null ? local.advanced : remote.advanced,
     pairs: local.pairs || remote.pairs,
     goal: local.goal || remote.goal,
@@ -2175,6 +2189,7 @@ async function loadAll(){
       weights: Array.isArray(data.weights) ? data.weights : [],
       swaps: (data.swaps && typeof data.swaps === 'object') ? data.swaps : {},
       custom: Array.isArray(data.custom) ? data.custom : [],
+      deload: (data.deload && typeof data.deload === 'object') ? data.deload : null,
       advanced: typeof data.advanced === 'boolean' ? data.advanced : null,
       pairs: (data.pairs && typeof data.pairs === 'object') ? data.pairs : {},
       goal: data.goal,
@@ -2223,11 +2238,12 @@ async function sendSave(){
         weights,
         swaps,
         custom,
+        deload,
         advanced,
         pairs,
         goal: weekGoal,
         split,
-        draft: activeType && draft ? { type: activeType, exercises: draft, date: draftDate, note: draftNote } : null
+        draft: activeType && draft ? { type: activeType, exercises: draft, date: draftDate, note: draftNote, deload: draftDeload } : null
       })
     });
     if (res.status === 401){
@@ -2454,9 +2470,10 @@ function exerciseRecord(name, before){
   return best;
 }
 // Рабочий вес упражнения по тренировкам: берём лучший подход каждого дня.
-function exerciseSeries(name){
+function exerciseSeries(name, real){
   const out = [];
   sessions.forEach(s => {
+    if (real && s.deload) return;
     const ex = (s.exercises || []).find(e => e.name === name);
     if (!ex) return;
     const sets = filledSets(ex);
@@ -3096,7 +3113,7 @@ function toggleSwap(key){
 // галочку. Подставляем, только если вес прежний: после прибавки или снижения
 // старые повторения уже ничего не значат, а прогрессия по времени и по
 // повторениям — это как раз то, что человек должен решить сам.
-function carryOver(cfg, advice, perf){
+function carryOver(cfg, advice, perf, eased){
   if (!perf || !perf.sets.length) return null;
   const pick = i => perf.sets[Math.min(i, perf.sets.length - 1)];
   // Подсказка «добавьте» — значит, прошлая цифра уже не цель.
@@ -3108,9 +3125,11 @@ function carryOver(cfg, advice, perf){
   const weights = perf.sets.map(x => Number(x.value1) || 0);
   const same = weights.every(w => w === weights[0]);
   // У упражнений без таблицы нормативов рекомендуемого веса нет — берём прошлый.
-  const own = !(advice && advice.weight) && same && weights[0] > 0 ? String(weights[0]) : '';
+  let own = !(advice && advice.weight) && same && weights[0] > 0 ? String(weights[0]) : '';
+  // В разгрузку вес мягче, а значит и старые повторения уже не подходят.
+  if (eased && own) own = String(Math.round(Number(own) * DELOAD_LOAD * 2) / 2);
   const today = advice && advice.weight ? Number(advice.weight) : weights[0];
-  if (moving || !same || (weights[0] > 0 && today !== weights[0])) return { weight: own, values: null };
+  if (eased || moving || !same || (weights[0] > 0 && today !== weights[0])) return { weight: own, values: null };
   return { weight: own, values: i => String(Number(pick(i).value2) || '') };
 }
 // Серое число — подставленное, а не введённое. Оно становится настоящим,
@@ -3121,9 +3140,9 @@ function isAuto(set){
 function draftExercise(ex, prev, before){
   const day = before || todayStr();
   const cfg = getConfig(ex);
-  const advice = weightAdvice(cfg, profile, day);
+  const advice = draftDeload ? easeAdvice(ex.name, weightAdvice(cfg, profile, day)) : weightAdvice(cfg, profile, day);
   const suggested = advice && advice.weight ? String(advice.weight) : '';
-  const carry = prev ? null : carryOver(cfg, advice, lastPerformance(ex.name, day));
+  const carry = prev ? null : carryOver(cfg, advice, lastPerformance(ex.name, day), draftDeload);
   return {
     name: ex.name,
     target: targetText(cfg),
@@ -3133,7 +3152,7 @@ function draftExercise(ex, prev, before){
     group: groupOf(ex.name) || null,
     note: (prev && prev.note) || '',
     advice,
-    sets: Array.from({length: cfg.sets}, (_, i) => {
+    sets: Array.from({length: draftDeload ? Math.max(2, cfg.sets - 1) : cfg.sets}, (_, i) => {
       const had = prev && prev.sets[i];
       const set = {
         value1: had ? had.value1 : (prev ? '' : (suggested || (carry && carry.weight) || '')),
@@ -3374,6 +3393,7 @@ function renderOrder(){
 }
 function startWorkout(type, prefill){
   orderMode = false; addOpen = false; swapRemember = false;
+  draftDeload = deloadActive();
   activeType = type;
   draftDate = null;
   draftNote = (prefill && prefill.note) || '';
@@ -3392,6 +3412,7 @@ function editSession(date){
   if (!entry) return;
   const inProgram = activeDays().flatMap(type => program[type] || []);
   orderMode = false; addOpen = false; swapRemember = false;
+  draftDeload = !!entry.deload;
   activeType = entry.type;
   draftDate = date === todayStr() ? null : date;
   draftNote = entry.note || '';
@@ -3446,6 +3467,7 @@ async function cancelWorkout(){
   orderMode = false; addOpen = false;
   stopRest();
   const edited = draftDate;
+  draftDeload = false;
   activeType = null; draft = null; draftDate = null; draftNote = '';
   view = edited ? 'history' : 'today';
   render();
@@ -3456,6 +3478,7 @@ async function finishWorkout(){
     date: draftDate || todayStr(),
     type: activeType,
     note: draftNote.trim(),
+    ...(draftDeload ? { deload: true } : {}),
     exercises: draft.map(ex => ({
       name: ex.name,
       isTime: ex.isTime,
@@ -3482,6 +3505,7 @@ async function finishWorkout(){
   sessions.push(entry);
   sessions.sort((a,b) => a.date.localeCompare(b.date));
   const edited = draftDate;
+  draftDeload = false;
   activeType = null; draft = null; draftDate = null; draftNote = '';
   view = edited ? 'history' : 'today';
   if (profile) program = buildProgram(profile);
@@ -3636,8 +3660,115 @@ function seenAdvanced(quiet){
 }
 // Вес стоит на месте: за три последние тренировки упражнения прибавки не было.
 // Тогда дропсет добавит мышце работы, не добавляя веса.
+function addDays(dateStr, n){
+  const d = new Date(dateStr + 'T00:00:00');
+  d.setDate(d.getDate() + n);
+  return todayStr(d);
+}
+function daysBetween(a, b){
+  return Math.round((new Date(b + 'T00:00:00') - new Date(a + 'T00:00:00')) / 86400000);
+}
+function deloadActive(){
+  const day = todayStr();
+  return !!(deload && deload.start && deload.end && day >= deload.start && day <= deload.end);
+}
+// С какого дня считаем нагрузку без перерыва. После разгрузки или перерыва
+// в две недели и больше — заново: это и есть отдых.
+function loadedSince(){
+  let since = null;
+  let prev = null;
+  sessions.forEach(s => {
+    if (s.deload){ since = null; prev = s.date; return; }
+    if (prev && daysBetween(prev, s.date) >= 14) since = null;
+    if (!since) since = s.date;
+    prev = s.date;
+  });
+  return since;
+}
+// Пора ли предложить разгрузку и почему. Три причины: долгий перерыв,
+// много недель без отдыха, вес встал почти везде.
+function deloadOffer(){
+  if (!profile || deloadActive()) return null;
+  if (deload && deload.snooze && todayStr() <= deload.snooze) return null;
+  if (sessions.length < 4) return null;
+  const today = todayStr();
+  const gap = daysBetween(sessions[sessions.length - 1].date, today);
+  if (gap >= 14) return { why: 'break', days: gap };
+  // Новичок в первые недели ещё набирает объём — ему не до разгрузки.
+  if (stageInfo(profile).ramping) return null;
+  const since = loadedSince();
+  if (!since) return null;
+  const weeks = Math.floor(daysBetween(since, today) / 7);
+  const count = sessions.filter(s => !s.deload && s.date >= since).length;
+  if (weeks >= (DELOAD_WEEKS[profile.level] || 7) && count >= weeks) return { why: 'time', weeks };
+  if (weeks >= 4){
+    const names = [...new Set(activeDays().flatMap(t => program[t] || []).filter(e => !e.isTime).map(e => e.name))];
+    const tracked = names.filter(n => exerciseSeries(n, true).filter(p => p.date >= since && p.unit === 'кг').length >= 3);
+    const stuck = tracked.filter(stalledWeight);
+    if (tracked.length >= 3 && stuck.length >= Math.ceil(tracked.length / 2)) return { why: 'stall', stuck: stuck.length, of: tracked.length };
+  }
+  return null;
+}
+function deloadReason(o){
+  if (o.why === 'break') return `Вы не тренировались ${o.days} ${plural(o.days, ['день', 'дня', 'дней'])}. С такого перерыва лучше вернуться мягко, а не с прежними весами.`;
+  if (o.why === 'stall') return `Вес не растёт уже в ${o.stuck} из ${o.of} упражнений — три тренировки подряд. Часто это усталость, а не потолок.`;
+  return `Вы тренируетесь без разгрузки уже ${o.weeks} ${plural(o.weeks, ['неделю', 'недели', 'недель'])}. Неделя полегче помогает восстановиться, и после неё вес растёт легче.`;
+}
+function startDeload(why){
+  deload = { start: todayStr(), end: addDays(todayStr(), DELOAD_DAYS - 1), why: why || 'manual', snooze: null };
+  render();
+  saveAll();
+}
+function endDeload(){
+  // Вчерашняя дата конца делает разгрузку прошедшей.
+  deload = { ...deload, end: addDays(todayStr(), -1), snooze: null };
+  render();
+  saveAll();
+}
+function snoozeDeload(){
+  deload = { ...(deload || {}), snooze: addDays(todayStr(), 7) };
+  render();
+  saveAll();
+}
+// Вес мягче, а причина написана в подсказке: иначе лёгкие цифры выглядели бы ошибкой.
+function easeAdvice(name, advice){
+  if (!advice || !advice.weight) return advice;
+  const load = LOADS[name];
+  const eased = load ? roundLoad(advice.weight * DELOAD_LOAD, load.eq) : Math.round(advice.weight * DELOAD_LOAD * 2) / 2;
+  return {
+    weight: eased,
+    text: `разгрузка: ${Math.round(DELOAD_LOAD * 100)}% от обычного веса (обычно ${kg(advice.weight)} кг) и на один подход меньше — без отказа`
+  };
+}
+function deloadCard(){
+  if (!profile) return '';
+  if (deloadActive()){
+    return `
+      <div class="card">
+        <p class="eyebrow">Разгрузочная неделя</p>
+        <p class="quiz-title">До ${dayText(deload.end)}</p>
+        <p class="exercise-preview">Вес — ${Math.round(DELOAD_LOAD * 100)}% от обычного, подходов на один меньше, без отказа. Потом всё вернётся как было: рекомендации считаются по обычным тренировкам.</p>
+        <button class="btn btn-outline" onclick="endDeload()">Закончить раньше</button>
+      </div>
+    `;
+  }
+  const offer = deloadOffer();
+  if (!offer) return '';
+  return `
+    <div class="card">
+      <p class="eyebrow">Совет</p>
+      <p class="quiz-title">Пора на разгрузку</p>
+      <p class="exercise-preview">${deloadReason(offer)}</p>
+      <p class="quiz-sub" style="margin:0 0 14px;">На неделю: вес ${Math.round(DELOAD_LOAD * 100)}% от обычного и на один подход меньше. Потом рекомендации вернутся к прежним.</p>
+      <div class="row-2">
+        <button class="btn btn-outline narrow" style="flex:0 0 132px; white-space:nowrap;" onclick="snoozeDeload()">Не сейчас</button>
+        <button class="btn btn-primary" onclick="startDeload('${offer.why}')">Начать разгрузку</button>
+      </div>
+    </div>
+  `;
+}
 function stalledWeight(name){
-  const series = exerciseSeries(name).filter(p => p.unit === 'кг');
+  const series = exerciseSeries(name, true).filter(p => p.unit === 'кг');
   if (series.length < 3) return false;
   const last = series.slice(-3).map(p => p.value);
   return Math.max(...last) <= last[0];
@@ -3780,6 +3911,7 @@ async function resetAll(){
     return;
   }
   sessions = [];
+  deload = null;
   if (profile) program = buildProgram(profile);
   await saveAll();
   resetArmed = false;
@@ -3933,6 +4065,7 @@ function renderToday(){
 
   return `
     ${quizCard}
+    ${deloadCard()}
     <div class="card">
       <p class="eyebrow" style="margin-bottom:10px;">${monthName(now.getFullYear(), now.getMonth())}</p>
       <div class="strip">${strip}</div>
@@ -4071,6 +4204,7 @@ function renderWorkout(){
         <p class="eyebrow">${TYPE_LABELS[activeType]}${draftDate ? ' · ' + dayText(draftDate) : ''}</p>
         <button class="wo-edit" onclick="openOrder()">Порядок и состав</button>
       </div>
+      ${draftDeload ? `<p class="swap-note" style="margin:0 0 10px;">Разгрузочная неделя: вес ${Math.round(DELOAD_LOAD * 100)}% от обычного, подходов на один меньше, без отказа.</p>` : ''}
       ${autoHint}
       ${pairHint}
       ${exercisesHtml}
@@ -4352,6 +4486,21 @@ function renderSettings(){
       ? 'Свои упражнения идут в конце выбранного дня. Рекомендуемый вес для них не считается: таблицы нормативов на произвольное упражнение нет, вес подбирайте сами. Остальное работает как обычно — история, график, рекорды, выгрузка. Если убрать упражнение, записанные тренировки с ним останутся.'
       : 'Если в зале стоит тренажёр, которого нет в списке, добавьте его сюда — он встанет в конец выбранного дня.'}</p>
   `;
+  const deloadGroup = !profile ? '' : `
+    <p class="section-title">Разгрузочная неделя</p>
+    <div class="card list">
+      ${deloadActive() ? `
+        <div class="row"><span class="row-body"><span class="row-label">Идёт до ${dayText(deload.end)}</span></span></div>
+        <button class="row" onclick="endDeload()"><span class="row-body"><span class="row-label" style="color:var(--red)">Закончить раньше</span></span></button>
+      ` : `
+        <button class="row" onclick="startDeload('manual')">
+          <span class="icon-sq" style="background:#30B0C7">${icon('heart')}</span>
+          <span class="row-body"><span class="row-label accent">Начать разгрузочную неделю</span></span>
+        </button>
+      `}
+    </div>
+    <p class="lib-note">Неделя с весом ${Math.round(DELOAD_LOAD * 100)}% от обычного и на один подход меньше: тело восстанавливается, а потом вес растёт легче. Приложение предложит её само — после многих недель без отдыха, когда вес встал почти везде или после долгого перерыва. Стоит начать её и после болезни или отпуска. Рекомендации по весу считаются по обычным тренировкам, поэтому после разгрузки всё вернётся как было.</p>
+  `;
   const advOn = advancedOn();
   const advEarned = advancedEarned();
   const advGroup = !profile ? '' : `
@@ -4476,6 +4625,7 @@ function renderSettings(){
     ${goalGroup}
     ${remindersGroup}
     ${restGroup}
+    ${deloadGroup}
     ${advGroup}
     ${dataGroup}
     ${statsGroup}
@@ -4515,7 +4665,7 @@ function renderHistory(){
       <details class="hist-item">
         <summary>
           <span>${formatDateRu(s.date)}</span>
-          <span class="row-value">Тип ${s.type}${icon('chevron')}</span>
+          <span class="row-value">Тип ${s.type}${s.deload ? ' · разгрузка' : ''}${icon('chevron')}</span>
         </summary>
         <div class="hist-body">
           ${s.note ? `<p class="hist-note top">💬 ${escapeHtml(s.note)}</p>` : ''}

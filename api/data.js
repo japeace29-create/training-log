@@ -98,6 +98,19 @@ function pairs(v){
   return out;
 }
 
+// Разгрузочная неделя: когда идёт, почему началась и до какого дня не беспокоить.
+function deload(v){
+  if (!v || typeof v !== 'object') return null;
+  const date = x => /^\d{4}-\d{2}-\d{2}$/.test(String(x || '')) ? String(x) : null;
+  const out = {
+    start: date(v.start),
+    end: date(v.end),
+    why: ['time', 'stall', 'break', 'manual'].includes(v.why) ? v.why : null,
+    snooze: date(v.snooze)
+  };
+  return out.start || out.snooze ? out : null;
+}
+
 function normalize(d){
   return {
     sessions: Array.isArray(d.sessions) ? d.sessions : [],
@@ -111,6 +124,7 @@ function normalize(d){
     goal: [2, 3, 4, 5].includes(d.goal) ? d.goal : 3,
     split: d.split === 3 ? 3 : 2,
     custom: customList(d.custom),
+    deload: deload(d.deload),
     // null — приёмы решает опыт, true/false — человек выбрал сам.
     advanced: typeof d.advanced === 'boolean' ? d.advanced : null,
     pairs: pairs(d.pairs)
