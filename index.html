@@ -744,6 +744,20 @@
   }
   .photo-view img{max-width:100%; max-height:76vh; border-radius:14px; object-fit:contain;}
   .photo-bar{display:flex; align-items:center; gap:18px; color:#fff; font-size:14px;}
+  .ai-text{
+    display:block;
+    width:calc(100% - 32px);
+    margin:0 16px 8px;
+    padding:12px 14px;
+    background:var(--surface);
+    color:var(--text-muted);
+    border:none;
+    border-radius:14px;
+    font:inherit;
+    font-size:12px;
+    line-height:1.45;
+    resize:vertical;
+  }
   .measure-form{display:grid; grid-template-columns:1fr 1fr; gap:10px 12px;}
   .measure-field{display:flex; flex-direction:column; gap:4px; font-size:13px; color:var(--text-muted);}
   .measure-field input{
@@ -1757,6 +1771,9 @@ let photoOpen = null;      // фото, открытое на весь экра�
 let photoArmed = null;     // удаление ждёт подтверждения
 let shareBusy = null;      // дата тренировки, карточку которой сейчас отправляем
 let shareNote = null;      // { date, text } — что ответил сервер
+let aiWeeks = 8;           // за сколько недель собирать текст для нейросети
+let aiText = '';           // собранный текст: его видно, чтобы можно было скопировать вручную
+let aiNote = '';
 let weightError = '';
 let restCfg = null;        // настройки таймера отдыха
 let rest = null;           // идущий отсчёт: { endsAt, name, done }
@@ -3253,6 +3270,96 @@ async function shareWorkout(date){
     shareNote = { date, text: e.message };
   }
   shareBusy = null;
+  render();
+}
+// История одним текстом: вставляется в любой чат с нейросетью, которую просят
+// разобрать прогресс. Без имени и номера в Telegram — только то, что для разбора нужно.
+const AI_LIMIT = 40000;
+function setLine(ex, st){
+  const v1 = Number(st.value1) || 0;
+  const v2 = Number(st.value2) || 0;
+  const body = ex.isTime ? v1 + ' сек' : v1 > 0 ? kgText(v1) + '×' + v2 : v2 + ' повт.';
+  return (st.warmup ? 'Р ' : st.drop ? 'Д ' : '') + body;
+}
+function buildAiText(weeks){
+  const from = todayStr(new Date(Date.now() - weeks * 7 * 86400000));
+  const list = sessions.filter(x => x.date >= from);
+  const parts = [];
+  parts.push('Ты — тренер по силовым тренировкам. Ниже мои данные за последние ' + weeks + ' ' + plural(weeks, ['неделю', 'недели', 'недель']) + '. Разбери их: где я прогрессирую, где застой, как распределена нагрузка по мышцам и хватает ли восстановления. Предложи 3–5 конкретных изменений. Отвечай по-русски и коротко.');
+  if (profile){
+    const facts = [
+      'пол — ' + (SEX_LABELS[profile.sex] || '').toLowerCase(),
+      profile.age + ' ' + plural(profile.age, ['год', 'года', 'лет']),
+      'рост ' + profile.height + ' см',
+      'вес ' + kgText(profile.weight) + ' кг'
+    ].filter(Boolean).join(', ');
+    parts.push('Обо мне: ' + facts + '. Цель: ' + optionLabel('goal', profile.goal).toLowerCase() + '. Уровень: ' + optionLabel('level', profile.level).toLowerCase()
+      + '. Тренируюсь: ' + optionLabel('place', profile.place).toLowerCase()
+      + (profile.limits && profile.limits.length ? '. Ограничения: ' + profile.limits.map(l => optionLabel('limits', l).toLowerCase()).join(', ') : '') + '.');
+  }
+  parts.push('Программа: ' + activeDays().join('/') + ' по кругу, цель — ' + weekGoal + ' ' + plural(weekGoal, ['тренировка', 'тренировки', 'тренировок']) + ' в неделю.');
+  const w = weights.filter(x => x.date >= from);
+  if (w.length) parts.push('Вес тела: ' + w.slice(-8).map(x => dayText(x.date, true) + ' ' + kgText(x.kg)).join('; ') + '.');
+  const m = measures.filter(x => x.date >= from);
+  if (m.length){
+    const row = m[m.length - 1];
+    parts.push('Замеры на ' + dayText(row.date) + ' (см): ' + MEASURES.filter(([k]) => row[k] != null).map(([k, l]) => l.toLowerCase() + ' ' + kgText(row[k])).join(', ') + '.');
+  }
+  parts.push('Обозначения: вес×повторения; Р — разминка, Д — дропсет, ★ — новый рекорд.');
+  const blocks = list.map(x => {
+    const lines = [dayText(x.date) + ' · Тренировка ' + x.type + (x.minutes ? ' · ' + minutesText(x.minutes) : '') + (x.deload ? ' · разгрузочная неделя' : '') + ':'];
+    x.exercises.forEach(ex => {
+      // Разминка в текст тоже идёт — с пометкой «Р»: по ней видно, как человек подходит к рабочему весу.
+      const sets = ex.sets.filter(st => Number(ex.isTime ? st.value1 : st.value2) > 0);
+      if (!sets.length) return;
+      const work = filledSets(ex);
+      const top = work.length ? Math.max(...work.map(st => setScore(ex.isTime, st))) : 0;
+      const before = exerciseRecord(ex.name, x.date);
+      lines.push('  ' + ex.name + (before && top > before.score ? ' ★' : '') + ': ' + sets.map(st => setLine(ex, st)).join(', ') + (ex.note ? ' (' + ex.note + ')' : ''));
+    });
+    if (x.note) lines.push('  Общая заметка: ' + x.note);
+    return lines.join('\n');
+  });
+  // Слишком длинный текст в чат не влезет: оставляем самые свежие тренировки.
+  let kept = blocks;
+  const head = parts.join('\n\n');
+  while (kept.length > 1 && head.length + kept.join('\n\n').length > AI_LIMIT) kept = kept.slice(1);
+  const cut = kept.length < blocks.length ? '(Показаны последние ' + kept.length + ' из ' + blocks.length + ' тренировок.)\n\n' : '';
+  return head + '\n\nТренировки:\n\n' + cut + kept.join('\n\n');
+}
+function setAiWeeks(n){
+  aiWeeks = n;
+  aiText = '';
+  aiNote = '';
+  render();
+}
+async function copyAiText(){
+  const count = sessions.filter(x => x.date >= todayStr(new Date(Date.now() - aiWeeks * 7 * 86400000))).length;
+  if (!count){
+    aiText = '';
+    aiNote = 'За этот срок тренировок нет — выберите больше недель.';
+    render();
+    return;
+  }
+  aiText = buildAiText(aiWeeks);
+  let copied = false;
+  try {
+    await navigator.clipboard.writeText(aiText);
+    copied = true;
+  } catch (e) {
+    try {
+      const area = document.createElement('textarea');
+      area.value = aiText;
+      area.style.cssText = 'position:fixed; opacity:0;';
+      document.body.appendChild(area);
+      area.select();
+      copied = document.execCommand('copy');
+      area.remove();
+    } catch (e2) { /* останется ручное копирование */ }
+  }
+  aiNote = copied
+    ? 'Скопировано: ' + count + ' ' + plural(count, ['тренировка', 'тренировки', 'тренировок']) + '. Вставьте текст в чат с нейросетью.'
+    : 'Автоматически скопировать не вышло — нажмите на текст ниже, выделите и скопируйте.';
   render();
 }
 async function exportData(format){
@@ -5127,6 +5234,15 @@ function renderSettings(){
       `}
     </div>
     ${exportNote ? `<p class="lib-note">${escapeHtml(exportNote)}</p>` : ''}
+    <p class="section-title">Для нейросети</p>
+    <div class="days" style="padding-top:0;">
+      ${[4, 8, 12].map(n => `<button class="${aiWeeks === n ? 'on' : ''}" onclick="setAiWeeks(${n})">${n} нед</button>`).join('')}
+    </div>
+    <div style="margin:0 16px;">
+      <button class="btn btn-outline" onclick="copyAiText()">Скопировать историю</button>
+    </div>
+    <p class="lib-note" style="margin-top:12px;">${aiNote ? escapeHtml(aiNote) : 'Соберёт тренировки за выбранный срок в один текст с просьбой разобрать прогресс — вставьте его в любой чат с нейросетью. В тексте есть цель, опыт, вес тела и тренировки, но нет имени и номера в Telegram.'}</p>
+    ${aiText ? `<textarea readonly class="ai-text" rows="8" onclick="this.select()">${escapeHtml(aiText)}</textarea>` : ''}
   `;
   const statsGroup = stats ? `
     <p class="section-title">Статистика</p>
