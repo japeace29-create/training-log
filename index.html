@@ -703,6 +703,21 @@
   .text-input::placeholder{color:var(--text-faint);}
   .field-label{font-size:13px; color:var(--text-muted); margin:16px 0 8px;}
   /* Нагрузка по мышцам: один ряд — одна группа, число стоит рядом со шкалой. */
+  .measure-form{display:grid; grid-template-columns:1fr 1fr; gap:10px 12px;}
+  .measure-field{display:flex; flex-direction:column; gap:4px; font-size:13px; color:var(--text-muted);}
+  .measure-field input{
+    width:100%;
+    background:var(--surface-2);
+    border:none;
+    color:var(--text);
+    border-radius:var(--radius-s);
+    padding:10px 12px;
+    font:inherit;
+    font-size:16px;
+    font-variant-numeric:tabular-nums;
+  }
+  .measure-field input::placeholder{color:var(--text-faint);}
+  .measure-field input:focus-visible{outline:2px solid var(--accent); outline-offset:0;}
   .rec-row{display:flex; align-items:center; gap:10px; padding:7px 0;}
   .rec-dot{flex:0 0 auto; width:10px; height:10px; border-radius:50%; background:var(--text-faint);}
   .rec-dot.ready{background:var(--green);}
@@ -1691,6 +1706,9 @@ let exportNote = '';       // что ответил сервер на выгру
 let exportBusy = false;
 let restoreFile = null;    // разобранный файл копии, ждёт подтверждения
 let weights = [];          // история веса: [{ date, kg }]
+let measures = [];         // замеры тела в сантиметрах: [{ date, waist, chest, hips, arm, thigh }]
+let measureType = 'waist'; // чей график показан
+let measureError = '';
 let weightError = '';
 let restCfg = null;        // настройки таймера отдыха
 let rest = null;           // идущий отсчёт: { endsAt, name, done }
@@ -2120,6 +2138,7 @@ function writeCache(pending){
       reminders,
       rest: restCfg,
       weights,
+      measures,
       swaps,
       goal: weekGoal,
       split,
@@ -2144,6 +2163,7 @@ function applyData(data){
   reminders = (data.reminders && typeof data.reminders === 'object') ? data.reminders : null;
   restCfg = (data.rest && typeof data.rest === 'object') ? data.rest : DEFAULT_REST();
   weights = Array.isArray(data.weights) ? data.weights : [];
+  measures = Array.isArray(data.measures) ? data.measures : [];
   swaps = (data.swaps && typeof data.swaps === 'object') ? data.swaps : {};
   custom = Array.isArray(data.custom) ? data.custom : [];
   deload = (data.deload && typeof data.deload === 'object') ? data.deload : null;
@@ -2181,6 +2201,14 @@ function applyData(data){
 // Записи, сделанные без сети, могли разойтись с сервером (например, человек
 // заходил с другого телефона). Тренировки объединяем по дате, остальное берём
 // своё — оно новее.
+// Замеры объединяются по датам, а внутри даты — по полям: с одного телефона
+// могли записать талию, с другого грудь.
+function mergeMeasures(remote, local){
+  const byDate = new Map();
+  (remote || []).forEach(m => byDate.set(m.date, m));
+  (local || []).forEach(m => byDate.set(m.date, { ...byDate.get(m.date), ...m }));
+  return [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date));
+}
 function mergeData(local, remote){
   const byDate = new Map();
   (remote.sessions || []).forEach(s => byDate.set(s.date, s));
@@ -2190,6 +2218,7 @@ function mergeData(local, remote){
   (local.weights || []).forEach(w => weighIns.set(w.date, w));
   return {
     weights: [...weighIns.values()].sort((a, b) => a.date.localeCompare(b.date)),
+    measures: mergeMeasures(remote.measures, local.measures),
     sessions: [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date)),
     overrides: local.overrides,
     profile: local.profile || remote.profile,
@@ -2221,6 +2250,7 @@ async function loadAll(){
       reminders: (data.reminders && typeof data.reminders === 'object') ? data.reminders : null,
       rest: (data.rest && typeof data.rest === 'object') ? data.rest : null,
       weights: Array.isArray(data.weights) ? data.weights : [],
+      measures: Array.isArray(data.measures) ? data.measures : [],
       swaps: (data.swaps && typeof data.swaps === 'object') ? data.swaps : {},
       custom: Array.isArray(data.custom) ? data.custom : [],
       deload: (data.deload && typeof data.deload === 'object') ? data.deload : null,
@@ -2257,6 +2287,7 @@ async function pullAndMerge(){
   (data.weights || []).forEach(w => weighIns.set(w.date, w));
   weights.forEach(w => weighIns.set(w.date, w));
   weights = [...weighIns.values()].sort((a, b) => a.date.localeCompare(b.date));
+  measures = mergeMeasures(data.measures, measures);
 }
 async function sendSave(){
   try{
@@ -2271,6 +2302,7 @@ async function sendSave(){
         reminders,
         rest: restCfg,
         weights,
+        measures,
         swaps,
         custom,
         deload,
@@ -2381,6 +2413,41 @@ function logWeight(){
   }
   render();
   saveAll();
+}
+const MEASURES = [['waist', 'Талия'], ['chest', 'Грудь'], ['hips', 'Бёдра'], ['arm', 'Плечо'], ['thigh', 'Бедро']];
+// Пустые поля не трогают уже записанное в этот день: можно замерить талию утром,
+// а бёдра вечером.
+function recordMeasures(values, date){
+  const clean = {};
+  for (const [key] of MEASURES){
+    const raw = values[key];
+    if (raw === '' || raw == null) continue;
+    const v = Math.round(Number(String(raw).replace(',', '.')) * 10) / 10;
+    if (!(v >= 10 && v <= 250)) return 'Замер должен быть от 10 до 250 см';
+    clean[key] = v;
+  }
+  if (!Object.keys(clean).length) return 'Впишите хотя бы один замер';
+  const day = date || todayStr();
+  const old = measures.find(m => m.date === day) || {};
+  measures = measures.filter(m => m.date !== day)
+    .concat([{ ...old, ...clean, date: day }])
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .slice(-300);
+  return '';
+}
+function logMeasures(){
+  const values = {};
+  MEASURES.forEach(([key]) => {
+    const input = document.getElementById('m-' + key);
+    values[key] = input ? input.value.trim() : '';
+  });
+  measureError = recordMeasures(values);
+  render();
+  if (!measureError) saveAll();
+}
+function setMeasureType(key){
+  measureType = key;
+  render();
 }
 function weightStats(){
   if (!weights.length) return null;
@@ -3904,7 +3971,17 @@ function monthSummary(month, upToDay){
     const start = before.length ? before[before.length - 1] : inMonth[0];
     weight = { end: end.kg, delta: Math.round((end.kg - start.kg) * 10) / 10 };
   }
-  return { month, ...stat(month), records, progress, weight, prev: stat(shiftMonth(month, -1), upToDay) };
+  const byDay = measures.filter(m => m && typeof m.date === 'string').slice().sort((a, b) => a.date.localeCompare(b.date));
+  const sizes = [];
+  MEASURES.forEach(([key]) => {
+    const now = byDay.filter(m => m.date.slice(0, 7) === month && Number(m[key]) > 0);
+    if (!now.length) return;
+    const end = Number(now[now.length - 1][key]);
+    const before = byDay.filter(m => m.date < month + '-01' && Number(m[key]) > 0);
+    const start = before.length ? Number(before[before.length - 1][key]) : Number(now[0][key]);
+    sizes.push({ key, end, delta: Math.round((end - start) * 10) / 10 });
+  });
+  return { month, ...stat(month), records, progress, weight, measures: sizes, prev: stat(shiftMonth(month, -1), upToDay) };
 }
 function shiftSummary(n){
   const now = todayStr().slice(0, 7);
@@ -3933,6 +4010,10 @@ function monthCard(){
   const lines = [];
   if (sum.timed >= 2) lines.push(`⏱ В зале: <b>${minutesText(sum.minutes)}</b>, в среднем ${Math.round(sum.minutes / sum.timed)} мин`);
   if (sum.progress) lines.push(`📈 Лучший прогресс: ${escapeHtml(sum.progress.name)} — ${kgText(sum.progress.from)} → ${kgText(sum.progress.to)} кг (+${sum.progress.pct}%)`);
+  if (sum.measures.length) lines.push('📏 Замеры: ' + sum.measures.map(x => {
+    const label = MEASURES.find(m => m[0] === x.key)[1].toLowerCase();
+    return `${label} ${kgText(x.end)} см${x.delta ? ' (' + (x.delta > 0 ? '+' : '−') + kgText(Math.abs(x.delta)) + ')' : ''}`;
+  }).join(', '));
   if (sum.weight) lines.push(`⚖️ Вес: ${kgText(sum.weight.end)} кг${sum.weight.delta ? ' (' + (sum.weight.delta > 0 ? '+' : '−') + kgText(Math.abs(sum.weight.delta)) + ' за месяц)' : ' (без изменений)'}`);
   return `
     <p class="section-title" style="margin-top:4px;">Итоги месяца</p>
@@ -4110,6 +4191,7 @@ async function resetAll(){
   }
   sessions = [];
   deload = null;
+  measures = [];
   if (profile) program = buildProgram(profile);
   await saveAll();
   resetArmed = false;
@@ -5056,9 +5138,49 @@ function renderProgress(){
     </div>
     <p class="lib-note">Мышцам обычно нужно около двух суток, прессу — сутки. Это ориентир, а не запрет: если самочувствие хорошее, тренироваться можно. Группа считается нагруженной, когда в тренировке на неё было хотя бы два рабочих подхода.</p>
   ` : '';
+  const mLabel = (MEASURES.find(x => x[0] === measureType) || MEASURES[0])[1];
+  const mSeries = measures.filter(m => m[measureType] != null).map(m => ({ date: m.date, value: m[measureType] }));
+  const mLast = mSeries.length ? mSeries[mSeries.length - 1] : null;
+  const mDelta = mSeries.length > 1 ? Math.round((mLast.value - mSeries[0].value) * 10) / 10 : null;
+  const latest = key => { const row = [...measures].reverse().find(m => m[key] != null); return row ? kgText(row[key]) : 'см'; };
+  const measureCard = `
+    <p class="section-title">Замеры</p>
+    <div class="card">
+      <div class="days" style="padding:0 0 12px;">
+        ${MEASURES.map(([key, label]) => `<button class="${measureType === key ? 'on' : ''}" onclick="setMeasureType('${key}')">${label}</button>`).join('')}
+      </div>
+      ${mLast ? `
+        <div class="weight-head">
+          <span class="weight-now">${kgText(mLast.value)}<span class="weight-unit">см</span></span>
+          <span class="weight-delta">${mDelta == null ? 'первый замер' : mDelta === 0 ? 'без изменений' : (mDelta > 0 ? '+' : '−') + kgText(Math.abs(mDelta)) + ' см с первого замера'}</span>
+        </div>
+        ${lineChart('measure', mSeries, v => kgText(v) + ' см')}
+        ${mSeries.length > 2 ? `<p class="weight-caption" id="cap-measure">${dayText(mLast.date)} — ${kgText(mLast.value)} см</p>` : ''}
+      ` : `<p class="empty" style="margin:0 0 12px;">${mLabel}: замеров пока нет</p>`}
+      <div class="measure-form">
+        ${MEASURES.map(([key, label]) => `
+          <label class="measure-field"><span>${label}</span>
+            <input type="text" id="m-${key}" inputmode="decimal" maxlength="5" placeholder="${latest(key)}">
+          </label>
+        `).join('')}
+      </div>
+      <button class="btn btn-outline" style="margin-top:12px;" onclick="logMeasures()">Записать замеры</button>
+      ${measureError ? `<p class="quiz-error" style="margin-bottom:0;">${measureError}</p>` : ''}
+      ${measures.length > 1 ? `
+        <details class="weight-table">
+          <summary>Все замеры (${measures.length})</summary>
+          ${[...measures].reverse().map(m => `
+            <div class="weight-row"><span>${dayText(m.date)}</span><span>${MEASURES.filter(([k]) => m[k] != null).map(([k, l]) => l.toLowerCase() + ' ' + kgText(m[k])).join(' · ')}</span></div>
+          `).join('')}
+        </details>
+      ` : ''}
+    </div>
+    <p class="lib-note">Мерьте раз в две-три недели, утром и в одном и том же месте: талию — на уровне пупка, грудь — по самой выпуклой части, бёдра — по самой широкой, плечо — по середине напряжённого бицепса, бедро — на середине. Достаточно вписать те, что измерили.</p>
+  `;
   return `
     ${monthCard()}
     ${weightCard}
+    ${measureCard}
     ${volumeCard}
     ${groupCard}
     ${recoveryCard}

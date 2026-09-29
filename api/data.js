@@ -98,6 +98,23 @@ function pairs(v){
   return out;
 }
 
+// Замеры тела в сантиметрах: по записи на дату, в каждой любые из пяти полей.
+const MEASURE_KEYS = ['waist', 'chest', 'hips', 'arm', 'thigh'];
+function measures(list){
+  if (!Array.isArray(list)) return [];
+  const byDate = new Map();
+  for (const item of list){
+    if (!item || !/^\d{4}-\d{2}-\d{2}$/.test(String(item.date))) continue;
+    const row = { date: String(item.date) };
+    for (const key of MEASURE_KEYS){
+      const v = Math.round(Number(item[key]) * 10) / 10;
+      if (v >= 10 && v <= 250) row[key] = v;
+    }
+    if (Object.keys(row).length > 1) byDate.set(row.date, { ...byDate.get(row.date), ...row });
+  }
+  return [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date)).slice(-300);
+}
+
 // Разгрузочная неделя: когда идёт, почему началась и до какого дня не беспокоить.
 function deload(v){
   if (!v || typeof v !== 'object') return null;
@@ -120,6 +137,7 @@ function normalize(d){
     reminders: reminders(d.reminders),
     rest: rest(d.rest),
     weights: weights(d.weights),
+    measures: measures(d.measures),
     swaps: swaps(d.swaps),
     goal: [2, 3, 4, 5].includes(d.goal) ? d.goal : 3,
     split: d.split === 3 ? 3 : 2,

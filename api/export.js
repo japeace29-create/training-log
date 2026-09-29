@@ -3,7 +3,9 @@ const { userIdFromRequest, botToken } = require('./_auth');
 const { normalize } = require('./data');
 
 const SEP = ';';   // Excel с русской локалью ждёт точку с запятой
-const HEADER = ['дата', 'тренировка', 'упражнение', 'подход', 'вес, кг', 'повторения', 'секунды', 'выполнено', 'заметка к упражнению', 'заметка к тренировке', 'длительность, мин'];
+const HEADER = ['дата', 'тренировка', 'упражнение', 'подход', 'вес, кг', 'повторения', 'секунды', 'выполнено', 'заметка к упражнению', 'заметка к тренировке', 'длительность, мин', 'замер, см'];
+
+const MEASURE_LABELS = [['waist', 'Талия'], ['chest', 'Грудь'], ['hips', 'Бёдра'], ['arm', 'Плечо'], ['thigh', 'Бедро']];
 
 function cell(value){
   const text = String(value == null ? '' : value);
@@ -37,13 +39,20 @@ function toCsv(data){
           set.done ? 'да' : 'нет',
           ex.note || '',
           session.note || '',
-          session.minutes || ''
+          session.minutes || '',
+          ''
         ].map(cell).join(SEP));
       });
     });
   });
   (data.weights || []).forEach(w => {
-    rows.push([w.date, '', 'Вес тела', '', num(w.kg), '', '', 'да', '', '', ''].map(cell).join(SEP));
+    rows.push([w.date, '', 'Вес тела', '', num(w.kg), '', '', 'да', '', '', '', ''].map(cell).join(SEP));
+  });
+  (data.measures || []).forEach(m => {
+    MEASURE_LABELS.forEach(([key, label]) => {
+      if (m[key] == null) return;
+      rows.push([m.date, '', 'Замер: ' + label.toLowerCase(), '', '', '', '', 'да', '', '', '', num(m[key])].map(cell).join(SEP));
+    });
   });
   return '﻿' + rows.join('\r\n') + '\r\n';
 }

@@ -5,6 +5,8 @@
 const MONTHS_GENITIVE = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
   'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
 
+const MEASURES = [['waist', 'Талия'], ['chest', 'Грудь'], ['hips', 'Бёдра'], ['arm', 'Плечо'], ['thigh', 'Бедро']];
+
 // Подходы, которые идут в объём: без разминки, с записанным результатом.
 // Дропсет — настоящая работа, поэтому в объёме он есть, а в рабочих подходах нет.
 function counted(ex){
@@ -101,7 +103,21 @@ function summarize(data, month, upToDay){
     weight = { end: end.kg, delta: Math.round((end.kg - start.kg) * 10) / 10 };
   }
 
-  return { month, ...stat(month), records, progress, weight, prev: stat(shiftMonth(month, -1), upToDay) };
+  const byDay = (Array.isArray(data.measures) ? data.measures : [])
+    .filter(m => m && typeof m.date === 'string')
+    .slice()
+    .sort((a, b) => a.date.localeCompare(b.date));
+  const sizes = [];
+  MEASURES.forEach(([key]) => {
+    const now = byDay.filter(m => m.date.slice(0, 7) === month && Number(m[key]) > 0);
+    if (!now.length) return;
+    const end = Number(now[now.length - 1][key]);
+    const before = byDay.filter(m => m.date < month + '-01' && Number(m[key]) > 0);
+    const start = before.length ? Number(before[before.length - 1][key]) : Number(now[0][key]);
+    sizes.push({ key, end, delta: Math.round((end - start) * 10) / 10 });
+  });
+
+  return { month, ...stat(month), records, progress, weight, measures: sizes, prev: stat(shiftMonth(month, -1), upToDay) };
 }
 
 function escapeHtml(s){
@@ -138,6 +154,13 @@ function summaryText(sum){
   if (sum.progress){
     const p = sum.progress;
     lines.push(`📈 Лучший прогресс: ${escapeHtml(p.name)} — ${num(p.from)} → ${num(p.to)} кг (+${p.pct}%)`);
+  }
+  if (sum.measures.length){
+    const parts = sum.measures.map(x => {
+      const label = MEASURES.find(m => m[0] === x.key)[1].toLowerCase();
+      return `${label} ${num(x.end)} см${x.delta ? ` (${x.delta > 0 ? '+' : '−'}${num(Math.abs(x.delta))})` : ''}`;
+    });
+    lines.push('📏 Замеры: ' + parts.join(', '));
   }
   if (sum.weight){
     const d = sum.weight.delta;
