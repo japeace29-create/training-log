@@ -48,7 +48,13 @@ function summarize(data, month, upToDay){
     const list = sessions.filter(s => s.date.slice(0, 7) === m && (!day || Number(s.date.slice(8, 10)) <= day));
     let sets = 0;
     list.forEach(s => (s.exercises || []).forEach(ex => { sets += working(ex).length; }));
-    return { workouts: list.length, sets, volume: list.reduce((t, s) => t + volume(s), 0) };
+    return {
+      workouts: list.length,
+      sets,
+      volume: list.reduce((t, s) => t + volume(s), 0),
+      minutes: list.reduce((t, s) => t + (Number(s.minutes) || 0), 0),
+      timed: list.filter(s => Number(s.minutes) > 0).length
+    };
   };
 
   // Рекорд — лучший подход упражнения за всю историю. Первый раз рекордом не считается.
@@ -107,6 +113,10 @@ function num(n){
 function tons(v){
   return v >= 1000 ? num(v / 1000) + ' т' : v + ' кг';
 }
+function hoursText(m){
+  if (m < 60) return m + ' мин';
+  return Math.floor(m / 60) + ' ч' + (m % 60 ? ' ' + (m % 60) + ' мин' : '');
+}
 function percent(cur, prev){
   if (!(prev > 0)) return '';
   const p = Math.round((cur / prev - 1) * 100);
@@ -124,6 +134,7 @@ function summaryText(sum){
     `Объём: <b>${tons(sum.volume)}</b>${percent(sum.volume, sum.prev.volume)}`
   ];
   if (sum.records) lines.push(`🏆 Новых рекордов: <b>${sum.records}</b>`);
+  if (sum.timed >= 2) lines.push(`⏱ В зале: <b>${hoursText(sum.minutes)}</b>, в среднем ${Math.round(sum.minutes / sum.timed)} мин`);
   if (sum.progress){
     const p = sum.progress;
     lines.push(`📈 Лучший прогресс: ${escapeHtml(p.name)} — ${num(p.from)} → ${num(p.to)} кг (+${p.pct}%)`);

@@ -1658,6 +1658,7 @@ let monthly = true;        // присылать ли итоги месяца в
 let summaryMonth = null;   // месяц в карточке итогов, «2026-09»; null — текущий
 let deload = null;         // { start, end, why, snooze } — идущая или отложенная разгрузка
 let draftDeload = false;   // тренировка, которую ведём сейчас, разгрузочная
+let draftClock = null;     // часы тренировки: { start, first, last } — миллисекунды; у правки — { frozen, minutes }
 let orderMode = false;     // экран «Порядок и состав» внутри тренировки
 let addOpen = false;       // открыт выбор упражнения, которое добавляем на сегодня
 let addQuery = '';
@@ -2121,7 +2122,7 @@ function writeCache(pending){
       pairs,
       deload,
       monthly,
-      draft: activeType && draft ? { type: activeType, exercises: draft, date: draftDate, note: draftNote, deload: draftDeload } : null,
+      draft: activeType && draft ? { type: activeType, exercises: draft, date: draftDate, note: draftNote, deload: draftDeload, clock: draftClock } : null,
       pending: !!pending,
       at: Date.now()
     }));
@@ -2157,6 +2158,7 @@ function applyData(data){
     draftDate = saved.date || null;
     draftNote = saved.note || '';
     draftDeload = !!saved.deload;
+    draftClock = (saved.clock && typeof saved.clock === 'object') ? saved.clock : null;
     view = 'workout';
   } else {
     activeType = null;
@@ -2164,6 +2166,7 @@ function applyData(data){
     draftDate = null;
     draftNote = '';
     draftDeload = false;
+    draftClock = null;
     // Бот умеет открыть приложение сразу на нужной вкладке.
     const wanted = new URLSearchParams(location.search).get('tab');
     view = TABS.some(t => t.id === wanted) ? wanted : 'today';
@@ -2271,7 +2274,7 @@ async function sendSave(){
         pairs,
         goal: weekGoal,
         split,
-        draft: activeType && draft ? { type: activeType, exercises: draft, date: draftDate, note: draftNote, deload: draftDeload } : null
+        draft: activeType && draft ? { type: activeType, exercises: draft, date: draftDate, note: draftNote, deload: draftDeload, clock: draftClock } : null
       })
     });
     if (res.status === 401){
@@ -3422,6 +3425,7 @@ function renderOrder(){
 function startWorkout(type, prefill){
   orderMode = false; addOpen = false; swapRemember = false;
   draftDeload = deloadActive();
+  draftClock = { start: Date.now(), first: null, last: null };
   activeType = type;
   draftDate = null;
   draftNote = (prefill && prefill.note) || '';
@@ -3441,6 +3445,8 @@ function editSession(date){
   const inProgram = activeDays().flatMap(type => program[type] || []);
   orderMode = false; addOpen = false; swapRemember = false;
   draftDeload = !!entry.deload;
+  // Правя прошлое, время не пересчитываем: сохраняем то, что записано.
+  draftClock = { frozen: true, minutes: entry.minutes || null };
   activeType = entry.type;
   draftDate = date === todayStr() ? null : date;
   draftNote = entry.note || '';
@@ -3496,17 +3502,20 @@ async function cancelWorkout(){
   stopRest();
   const edited = draftDate;
   draftDeload = false;
+  draftClock = null;
   activeType = null; draft = null; draftDate = null; draftNote = '';
   view = edited ? 'history' : 'today';
   render();
   await saveAll();
 }
 async function finishWorkout(){
+  const minutes = clockMinutes(draftClock);
   const entry = {
     date: draftDate || todayStr(),
     type: activeType,
     note: draftNote.trim(),
     ...(draftDeload ? { deload: true } : {}),
+    ...(minutes ? { minutes } : {}),
     exercises: draft.map(ex => ({
       name: ex.name,
       isTime: ex.isTime,
@@ -3534,6 +3543,7 @@ async function finishWorkout(){
   sessions.sort((a,b) => a.date.localeCompare(b.date));
   const edited = draftDate;
   draftDeload = false;
+  draftClock = null;
   activeType = null; draft = null; draftDate = null; draftNote = '';
   view = edited ? 'history' : 'today';
   if (profile) program = buildProgram(profile);
@@ -3809,7 +3819,13 @@ function monthSummary(month, upToDay){
     const inMonth = list.filter(s => s.date.slice(0, 7) === m && (!day || Number(s.date.slice(8, 10)) <= day));
     let sets = 0;
     inMonth.forEach(s => (s.exercises || []).forEach(ex => { sets += filledSets(ex).length; }));
-    return { workouts: inMonth.length, sets, volume: inMonth.reduce((t, s) => t + sessionVolume(s), 0) };
+    return {
+      workouts: inMonth.length,
+      sets,
+      volume: inMonth.reduce((t, s) => t + sessionVolume(s), 0),
+      minutes: inMonth.reduce((t, s) => t + (Number(s.minutes) || 0), 0),
+      timed: inMonth.filter(s => Number(s.minutes) > 0).length
+    };
   };
   const best = new Map();
   const topBefore = new Map();
@@ -3873,6 +3889,7 @@ function monthCard(){
   const tile = (value, label, change) => `<div class="stat"><div class="num">${value}</div><div class="lbl">${label}</div>${change || ''}</div>`;
   const ton = v => v >= 1000 ? kgText(v / 1000) + ' т' : v + ' кг';
   const lines = [];
+  if (sum.timed >= 2) lines.push(`⏱ В зале: <b>${minutesText(sum.minutes)}</b>, в среднем ${Math.round(sum.minutes / sum.timed)} мин`);
   if (sum.progress) lines.push(`📈 Лучший прогресс: ${escapeHtml(sum.progress.name)} — ${kgText(sum.progress.from)} → ${kgText(sum.progress.to)} кг (+${sum.progress.pct}%)`);
   if (sum.weight) lines.push(`⚖️ Вес: ${kgText(sum.weight.end)} кг${sum.weight.delta ? ' (' + (sum.weight.delta > 0 ? '+' : '−') + kgText(Math.abs(sum.weight.delta)) + ' за месяц)' : ' (без изменений)'}`);
   return `
@@ -4019,6 +4036,11 @@ function toggleDone(exIdx, setIdx){
   if (isAuto(set)) seenAuto();
   set.done = !set.done;
   if (set.done){
+    if (draftClock && !draftClock.frozen){
+      const now = Date.now();
+      if (!draftClock.first) draftClock.first = now;
+      draftClock.last = now;
+    }
     const record = exerciseRecord(ex.name, todayStr());
     if (record && !set.warmup && !set.drop && setScore(ex.isTime, set) > record.score) haptic();
     // Дропсет и первое упражнение пары делаются без паузы — таймер молчит.
@@ -4122,10 +4144,33 @@ function plural(n, forms){
   if (b > 1 && b < 5) return forms[1];
   return b === 1 ? forms[0] : forms[2];
 }
-function workoutSummary(list){
+// Сколько тренировка длилась на самом деле: от начала до последнего отмеченного
+// подхода. Если человек нажал «Начать» и полчаса ходил по залу, отсчёт идёт от
+// первого подхода. Меньше пяти минут и больше четырёх часов — не время
+// тренировки, а забытое приложение, такое не записываем.
+function clockMinutes(c){
+  if (!c) return null;
+  if (c.frozen) return c.minutes || null;
+  if (!c.first) return null;
+  const start = c.first - c.start > 20 * 60000 ? c.first - 5 * 60000 : c.start;
+  const min = Math.round((c.last - start) / 60000);
+  return min >= 5 && min <= 240 ? min : null;
+}
+function minutesText(m){
+  if (m < 60) return m + ' мин';
+  return Math.floor(m / 60) + ' ч' + (m % 60 ? ' ' + (m % 60) + ' мин' : '');
+}
+// Типичная длительность этой тренировки у самого человека — по последним пяти.
+function typicalMinutes(type){
+  const list = sessions.filter(s => s.type === type && s.minutes && !s.deload).slice(-5).map(s => s.minutes).sort((a, b) => a - b);
+  return list.length >= 3 ? list[Math.floor(list.length / 2)] : null;
+}
+function workoutSummary(list, type){
   const setsTotal = list.reduce((sum, ex) => sum + ex.sets, 0);
   const minutes = Math.round((setsTotal * 2.5 + 8) / 5) * 5;
-  return list.length + ' ' + plural(list.length, ['упражнение', 'упражнения', 'упражнений']) + ' · примерно ' + minutes + ' минут';
+  const typical = type ? typicalMinutes(type) : null;
+  const time = typical ? 'обычно около ' + Math.round(typical / 5) * 5 + ' минут' : 'примерно ' + minutes + ' минут';
+  return list.length + ' ' + plural(list.length, ['упражнение', 'упражнения', 'упражнений']) + ' · ' + time;
 }
 
 function renderToday(){
@@ -4157,7 +4202,7 @@ function renderToday(){
       <div class="card">
         <p class="eyebrow">Следующая тренировка</p>
         <p class="hero-type">${TYPE_LABELS[type]}</p>
-        <p class="quiz-sub" style="margin:2px 0 0;">${workoutSummary(program[type])}</p>
+        <p class="quiz-sub" style="margin:2px 0 0;">${workoutSummary(program[type], type)}</p>
         <p class="exercise-preview">${program[type].map(e=>e.name).join(' · ')}</p>
         <button class="btn btn-primary" onclick="startWorkout('${type}')">Начать тренировку</button>
       </div>
@@ -4815,7 +4860,7 @@ function renderHistory(){
       <details class="hist-item">
         <summary>
           <span>${formatDateRu(s.date)}</span>
-          <span class="row-value">Тип ${s.type}${s.deload ? ' · разгрузка' : ''}${icon('chevron')}</span>
+          <span class="row-value">Тип ${s.type}${s.minutes ? ' · ' + minutesText(s.minutes) : ''}${s.deload ? ' · разгрузка' : ''}${icon('chevron')}</span>
         </summary>
         <div class="hist-body">
           ${s.note ? `<p class="hist-note top">💬 ${escapeHtml(s.note)}</p>` : ''}

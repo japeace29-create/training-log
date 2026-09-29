@@ -3,7 +3,7 @@ const { userIdFromRequest, botToken } = require('./_auth');
 const { normalize } = require('./data');
 
 const SEP = ';';   // Excel с русской локалью ждёт точку с запятой
-const HEADER = ['дата', 'тренировка', 'упражнение', 'подход', 'вес, кг', 'повторения', 'секунды', 'выполнено', 'заметка к упражнению', 'заметка к тренировке'];
+const HEADER = ['дата', 'тренировка', 'упражнение', 'подход', 'вес, кг', 'повторения', 'секунды', 'выполнено', 'заметка к упражнению', 'заметка к тренировке', 'длительность, мин'];
 
 function cell(value){
   const text = String(value == null ? '' : value);
@@ -36,13 +36,14 @@ function toCsv(data){
           ex.isTime ? weight : '',
           set.done ? 'да' : 'нет',
           ex.note || '',
-          session.note || ''
+          session.note || '',
+          session.minutes || ''
         ].map(cell).join(SEP));
       });
     });
   });
   (data.weights || []).forEach(w => {
-    rows.push([w.date, '', 'Вес тела', '', num(w.kg), '', '', 'да', '', ''].map(cell).join(SEP));
+    rows.push([w.date, '', 'Вес тела', '', num(w.kg), '', '', 'да', '', '', ''].map(cell).join(SEP));
   });
   return '﻿' + rows.join('\r\n') + '\r\n';
 }
