@@ -125,6 +125,10 @@ function normalize(d){
     split: d.split === 3 ? 3 : 2,
     custom: customList(d.custom),
     deload: deload(d.deload),
+    // Итоги месяца присылаются, пока человек их не выключил.
+    monthly: d.monthly !== false,
+    // Часовой пояс нужен боту, чтобы писать в удобное время и тем, у кого не заведены напоминания.
+    tz: typeof d.tz === 'string' && d.tz ? d.tz.slice(0, 64) : null,
     // null — приёмы решает опыт, true/false — человек выбрал сам.
     advanced: typeof d.advanced === 'boolean' ? d.advanced : null,
     pairs: pairs(d.pairs)

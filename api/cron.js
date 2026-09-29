@@ -1,5 +1,6 @@
 const { kvCommand } = require('./_lib');
 const { siteUrl, botRequest } = require('./_auth');
+const { summarize, summaryText, shiftMonth } = require('./_summary');
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const LATE_LIMIT_MINUTES = 120;
@@ -59,6 +60,16 @@ function decide(data, local, remindedDate, weighedDate){
   return out;
 }
 
+// Итоги прошлого месяца приходят в первые три дня нового, когда у человека
+// уже десять утра, и один раз: отметка хранится по месяцам.
+function decideMonthly(data, local, sentMonth){
+  if (!data || data.monthly === false) return null;
+  const day = Number(local.date.slice(8, 10));
+  if (day > 3 || local.minutes < 10 * 60) return null;
+  const month = shiftMonth(local.date.slice(0, 7), -1);
+  return sentMonth === month ? null : month;
+}
+
 function reminderText(data, local){
   const sessions = Array.isArray(data.sessions) ? data.sessions : [];
   // Очередь зависит от того, две тренировки в программе или три.
@@ -102,13 +113,15 @@ module.exports = async (req, res) => {
       res.status(200).json({ checked: 0, sent: 0 });
       return;
     }
-    const [values, remindedRaw, weighedRaw] = await Promise.all([
+    const [values, remindedRaw, weighedRaw, monthlyRaw] = await Promise.all([
       kvCommand(['MGET', ...ids.map(id => 'training-log:data:' + id)]),
       kvCommand(['HGETALL', 'training-log:reminded']),
-      kvCommand(['HGETALL', 'training-log:reminded-weight'])
+      kvCommand(['HGETALL', 'training-log:reminded-weight']),
+      kvCommand(['HGETALL', 'training-log:monthly-sent'])
     ]);
     const reminded = toMap(remindedRaw);
     const weighed = toMap(weighedRaw);
+    const monthlySent = toMap(monthlyRaw);
     const site = siteUrl(req);
     // Кнопка может открыть приложение сразу на нужной вкладке.
     const button = (text, tab) => ({
@@ -116,14 +129,37 @@ module.exports = async (req, res) => {
     });
     let sent = 0;
     let weightSent = 0;
+    let monthlyCount = 0;
 
     for (let i = 0; i < ids.length; i++) {
       const id = ids[i];
       let data;
       try { data = JSON.parse(values[i]); } catch (e) { continue; }
-      if (!data || !data.reminders) continue;
+      if (!data) continue;
 
-      const local = localNow(data.reminders.tz);
+      const local = localNow((data.reminders && data.reminders.tz) || data.tz);
+
+      // Итоги месяца — всем, кто их не выключил, но только тем, кто в этом месяце тренировался.
+      const month = decideMonthly(data, local, monthlySent[id]);
+      if (month) {
+        await kvCommand(['HSET', 'training-log:monthly-sent', id, month]);
+        const sum = summarize(data, month);
+        if (sum.workouts >= 2) {
+          try {
+            await botRequest('sendMessage', {
+              chat_id: id,
+              parse_mode: 'HTML',
+              text: summaryText(sum),
+              reply_markup: button('Открыть дневник', 'progress')
+            });
+            monthlyCount++;
+          } catch (e) {
+            console.error('Monthly summary failed for ' + id, e.message);
+          }
+        }
+      }
+
+      if (!data.reminders) continue;
       const todo = decide(data, local, reminded[id], weighed[id]);
 
       if (todo.workout) {
@@ -164,11 +200,12 @@ module.exports = async (req, res) => {
       }
     }
 
-    res.status(200).json({ checked: ids.length, sent, weight: weightSent });
+    res.status(200).json({ checked: ids.length, sent, weight: weightSent, monthly: monthlyCount });
   } catch (e) {
     res.status(500).json({ error: String(e && e.message || e) });
   }
 };
 
 module.exports.decide = decide;
+module.exports.decideMonthly = decideMonthly;
 module.exports.localNow = localNow;
