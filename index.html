@@ -703,6 +703,12 @@
   .text-input::placeholder{color:var(--text-faint);}
   .field-label{font-size:13px; color:var(--text-muted); margin:16px 0 8px;}
   /* Нагрузка по мышцам: один ряд — одна группа, число стоит рядом со шкалой. */
+  .rec-row{display:flex; align-items:center; gap:10px; padding:7px 0;}
+  .rec-dot{flex:0 0 auto; width:10px; height:10px; border-radius:50%; background:var(--text-faint);}
+  .rec-dot.ready{background:var(--green);}
+  .rec-dot.tired{background:var(--orange);}
+  .rec-name{flex:0 0 62px; font-size:15px;}
+  .rec-text{flex:1; text-align:right; font-size:13px; color:var(--text-muted);}
   .group-chart{display:flex; flex-direction:column; gap:10px;}
   .group-row{display:flex; align-items:center; gap:10px;}
   .group-name{flex:0 0 58px; font-size:13px; color:var(--text-muted);}
@@ -3576,6 +3582,42 @@ function groupLoad(days){
   const rows = GROUPS.map(g => ({ group: g, sets: totals.get(g) }));
   return { rows, other, total: rows.reduce((a, r) => a + r.sets, 0) + other, weeks: days / 7 };
 }
+// Сколько суток мышце обычно нужно на восстановление. Это ориентир, а не запрет:
+// схема «две полных тренировки через день» им и пользуется.
+const RECOVERY_DAYS = { 'Ноги': 2, 'Спина': 2, 'Грудь': 2, 'Плечи': 2, 'Руки': 2, 'Пресс': 1 };
+// Группа считается нагруженной, если в тренировке на неё было хотя бы два рабочих
+// подхода: один подход — это скорее разогрев, чем нагрузка.
+function groupRecovery(){
+  const today = todayStr();
+  const last = new Map();
+  sessions.forEach(s => {
+    const sets = new Map();
+    (s.exercises || []).forEach(ex => {
+      const g = ex.group || groupOf(ex.name);
+      if (g) sets.set(g, (sets.get(g) || 0) + filledSets(ex).length);
+    });
+    sets.forEach((n, g) => { if (n >= 2 && (!last.has(g) || s.date > last.get(g))) last.set(g, s.date); });
+  });
+  return GROUPS.map(group => {
+    const date = last.get(group) || null;
+    const days = date ? Math.max(0, daysBetween(date, today)) : null;
+    return { group, date, days, ready: days != null && days >= RECOVERY_DAYS[group], stale: days != null && days > 14 };
+  });
+}
+function recoveryText(r){
+  if (r.days == null) return 'нет записей';
+  if (r.stale) return r.days + ' ' + plural(r.days, ['день', 'дня', 'дней']) + ' назад · давно не грузили';
+  const when = r.days === 0 ? 'сегодня' : r.days === 1 ? 'вчера' : r.days + ' ' + plural(r.days, ['день', 'дня', 'дней']) + ' назад';
+  return when + (r.ready ? ' · готова' : ' · восстанавливается');
+}
+// Что нагрузит ближайшая тренировка и не накладывается ли это на вчерашнюю.
+function recoveryNote(type){
+  if (!type || !program[type]) return '';
+  const groups = new Set(program[type].map(e => groupOf(e.name)).filter(Boolean));
+  const tired = groupRecovery().filter(r => groups.has(r.group) && r.days != null && !r.ready && !r.stale).map(r => r.group.toLowerCase());
+  if (!tired.length) return '';
+  return `Ещё восстанавливаются: ${tired.join(', ')}. Можно начать с упражнений на другие группы: порядок меняется кнопкой «Порядок и состав».`;
+}
 function openCustom(){
   customOpen = true;
   customError = '';
@@ -4204,6 +4246,7 @@ function renderToday(){
         <p class="hero-type">${TYPE_LABELS[type]}</p>
         <p class="quiz-sub" style="margin:2px 0 0;">${workoutSummary(program[type], type)}</p>
         <p class="exercise-preview">${program[type].map(e=>e.name).join(' · ')}</p>
+        ${recoveryNote(type) ? `<p class="quiz-sub" style="margin:0 0 14px;">${recoveryNote(type)}</p>` : ''}
         <button class="btn btn-primary" onclick="startWorkout('${type}')">Начать тренировку</button>
       </div>
     `;
@@ -4999,11 +5042,26 @@ function renderProgress(){
     </div>
     <p class="lib-note">Считаем подходами, а не килограммами: в килограммах ноги выигрывают всегда, и по ним не видно, что спину пропустили. Разминка и дропсеты в счёт не идут.</p>
   `;
+  const rec = groupRecovery();
+  const recoveryCard = sessions.length ? `
+    <p class="section-title">Восстановление</p>
+    <div class="card">
+      ${rec.map(r => `
+        <div class="rec-row">
+          <span class="rec-dot ${r.days == null || r.stale ? 'idle' : r.ready ? 'ready' : 'tired'}"></span>
+          <span class="rec-name">${r.group}</span>
+          <span class="rec-text">${recoveryText(r)}</span>
+        </div>
+      `).join('')}
+    </div>
+    <p class="lib-note">Мышцам обычно нужно около двух суток, прессу — сутки. Это ориентир, а не запрет: если самочувствие хорошее, тренироваться можно. Группа считается нагруженной, когда в тренировке на неё было хотя бы два рабочих подхода.</p>
+  ` : '';
   return `
     ${monthCard()}
     ${weightCard}
     ${volumeCard}
     ${groupCard}
+    ${recoveryCard}
     <p class="section-title">Упражнения</p>
     <div class="card list">${rows}</div>
     <p class="lib-note">Нажмите на упражнение — покажу, как менялся рабочий вес.</p>
