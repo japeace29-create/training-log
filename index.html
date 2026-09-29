@@ -620,6 +620,54 @@
     border-radius:10px;
     object-fit:cover;
   }
+  .wo-head{display:flex; align-items:baseline; justify-content:space-between; gap:12px;}
+  .wo-edit{
+    border:none;
+    background:none;
+    color:var(--accent);
+    font:inherit;
+    font-size:14px;
+    font-weight:600;
+    cursor:pointer;
+    padding:4px 0;
+    white-space:nowrap;
+  }
+  .order-row{
+    display:flex;
+    align-items:center;
+    gap:4px;
+    padding:10px 0;
+    border-bottom:0.5px solid var(--separator);
+  }
+  .order-name{flex:1; min-width:0; display:flex; flex-direction:column; gap:2px;}
+  .order-name b{font-weight:500; font-size:15px;}
+  .order-name span{font-size:13px; color:var(--text-muted);}
+  .order-move{
+    flex:0 0 auto;
+    width:38px;
+    height:38px;
+    border:none;
+    border-radius:11px;
+    background:var(--surface-2);
+    color:var(--accent);
+    font:inherit;
+    font-size:18px;
+    cursor:pointer;
+  }
+  .order-move:disabled{opacity:0.3; cursor:default;}
+  .order-remove{
+    flex:0 0 auto;
+    min-width:50px;
+    padding:8px 2px;
+    border:none;
+    background:none;
+    color:var(--red);
+    font:inherit;
+    font-size:13px;
+    cursor:pointer;
+  }
+  .order-remove:disabled{opacity:0.3; cursor:default;}
+  .add-panel{margin-top:14px;}
   .text-input{
     width:100%;
     background:var(--surface-2);
@@ -705,6 +753,8 @@
     font-variant-numeric:tabular-nums;
   }
   .set-row input::placeholder{color:var(--text-faint);}
+  /* Подставленное из прошлой тренировки: серым, пока не подтвердили. */
+  .set-row input.auto{color:var(--text-muted);}
   .set-row input:focus-visible,
   .cfg-inputs input:focus-visible{outline:2px solid var(--accent); outline-offset:0;}
   .set-row .unit{font-size:13px; color:var(--text-muted); width:20px;}
@@ -1578,9 +1628,19 @@ let customOpen = false;    // открыта форма добавления
 let customDraft = null;    // что набрано в форме
 let customError = '';
 let customArmed = null;    // удаление своего упражнения ждёт подтверждения
+let orderMode = false;     // экран «Порядок и состав» внутри тренировки
+let addOpen = false;       // открыт выбор упражнения, которое добавляем на сегодня
+let addQuery = '';
+let addGroup = '';         // '' — все группы мышц
+let removeArmed = null;    // упражнение с записанными подходами ждёт подтверждения
+let swapRemember = false;  // замена посреди тренировки: запомнить ли на будущее
 let advanced = null;       // продвинутые приёмы: null — решает опыт, true/false — выбор человека
 let pairs = {};            // суперсеты: { 'A:1': true } — упражнение идёт в паре со следующим
 // Сообщение об открытых приёмах показываем один раз, поэтому оно на устройстве.
+// Подсказку про серые цифры показываем, пока человек ни разу их не подтвердил.
+let autoSeen = (() => {
+  try { return localStorage.getItem('auto-seen') === '1'; } catch (e) { return false; }
+})();
 let advSeen = (() => {
   try { return localStorage.getItem('adv-seen') === '1'; } catch (e) { return false; }
 })();
@@ -1816,6 +1876,13 @@ function setsFor(role, tags, p, stage){
   if (role === 'main') return (p.level === 'advanced' || p.duration === 'long') && !tags.has('beginner') ? 4 : 3;
   return tags.has('beginner') || p.goal === 'health' ? 2 : 3;
 }
+// Подходы и повторения для упражнения с заданной ролью — по тем же правилам,
+// что и программа, чтобы добавленное на сегодня не выбивалось из неё.
+function planFor(role, p, tags, stage, reps){
+  let [repsMin, repsMax] = reps[role];
+  if (role === 'main' && repsMin < 8 && (tags.has('senior') || tags.has('young'))) [repsMin, repsMax] = [8, 10];
+  return { sets: setsFor(role, tags, p, stage), repsMin, repsMax, isTime: role === 'time' };
+}
 function buildProgram(p, doneCount){
   const tags = profileTags(p);
   const rank = EQ_RANK[p.place];
@@ -1835,9 +1902,7 @@ function buildProgram(p, doneCount){
           || fits.find(v => !(v.avoid || []).some(t => tags.has(t)))
           || fits[fits.length - 1];
         used.add(v.name);
-        let [repsMin, repsMax] = reps[v.role];
-        if (v.role === 'main' && repsMin < 8 && (tags.has('senior') || tags.has('young'))) [repsMin, repsMax] = [8, 10];
-        return { name: v.name, sets: setsFor(v.role, tags, p, stage), repsMin, repsMax, isTime: v.role === 'time', type, slot: index };
+        return { name: v.name, ...planFor(v.role, p, tags, stage, reps), type, slot: index };
       });
     // Свои упражнения идут после программных, в конце дня. Номер слота берём
     // заведомо больше готовых, чтобы не путался с ними в заменах и парах.
@@ -2966,11 +3031,13 @@ async function resetProgramChoices(){
 
 const EQ_LABELS = { gym: 'зал', dumbbells: 'гантели', none: 'без инвентаря' };
 // Что ещё умеет заменить это движение: то же место в тренировке, но другой снаряд.
-function alternatives(type, slotIndex){
+function alternatives(type, slotIndex, today){
   const slot = SLOTS[type] && SLOTS[type][slotIndex];
   if (!slot) return [];
   const rank = EQ_RANK[(profile && profile.place) || 'gym'];
-  const busy = new Set((program[type] || []).filter(ex => ex.slot !== slotIndex).map(ex => ex.name));
+  // Занято то, что уже есть в тренировке: сегодня — в сегодняшней, иначе в программе.
+  const taken = today && draft ? draft : (program[type] || []);
+  const busy = new Set(taken.filter(ex => ex.slot !== slotIndex).map(ex => ex.name));
   return slot.variants.filter(v => EQ_RANK[v.eq] <= rank && !busy.has(v.name));
 }
 function toggleHowto(name){
@@ -3001,10 +3068,38 @@ function toggleSwap(key){
   swapOpen = swapOpen === key ? null : key;
   render();
 }
-function draftExercise(ex, prev){
+// Что подставить в подходы из прошлой тренировки, чтобы оставалось нажать
+// галочку. Подставляем, только если вес прежний: после прибавки или снижения
+// старые повторения уже ничего не значат, а прогрессия по времени и по
+// повторениям — это как раз то, что человек должен решить сам.
+function carryOver(cfg, advice, perf){
+  if (!perf || !perf.sets.length) return null;
+  const pick = i => perf.sets[Math.min(i, perf.sets.length - 1)];
+  // Подсказка «добавьте» — значит, прошлая цифра уже не цель.
+  const moving = !!(advice && (advice.trend || (!advice.weight && advice.text)));
+  if (perf.isTime){
+    if (moving) return null;
+    return { weight: '', values: i => String(Number(pick(i).value1) || '') };
+  }
+  const weights = perf.sets.map(x => Number(x.value1) || 0);
+  const same = weights.every(w => w === weights[0]);
+  // У упражнений без таблицы нормативов рекомендуемого веса нет — берём прошлый.
+  const own = !(advice && advice.weight) && same && weights[0] > 0 ? String(weights[0]) : '';
+  const today = advice && advice.weight ? Number(advice.weight) : weights[0];
+  if (moving || !same || (weights[0] > 0 && today !== weights[0])) return { weight: own, values: null };
+  return { weight: own, values: i => String(Number(pick(i).value2) || '') };
+}
+// Серое число — подставленное, а не введённое. Оно становится настоящим,
+// когда человек отметил подход или вписал своё; иначе в дневник не попадёт.
+function isAuto(set){
+  return set.seed != null && !set.touched && !set.done;
+}
+function draftExercise(ex, prev, before){
+  const day = before || todayStr();
   const cfg = getConfig(ex);
-  const advice = weightAdvice(cfg, profile, todayStr());
+  const advice = weightAdvice(cfg, profile, day);
   const suggested = advice && advice.weight ? String(advice.weight) : '';
+  const carry = prev ? null : carryOver(cfg, advice, lastPerformance(ex.name, day));
   return {
     name: ex.name,
     target: targetText(cfg),
@@ -3014,11 +3109,21 @@ function draftExercise(ex, prev){
     group: groupOf(ex.name) || null,
     note: (prev && prev.note) || '',
     advice,
-    sets: Array.from({length: cfg.sets}, (_, i) => ({
-      value1: prev && prev.sets[i] ? prev.sets[i].value1 : (prev ? '' : suggested),
-      value2: prev && prev.sets[i] ? prev.sets[i].value2 : '',
-      done: prev && prev.sets[i] ? prev.sets[i].done : false
-    }))
+    sets: Array.from({length: cfg.sets}, (_, i) => {
+      const had = prev && prev.sets[i];
+      const set = {
+        value1: had ? had.value1 : (prev ? '' : (suggested || (carry && carry.weight) || '')),
+        value2: had ? had.value2 : '',
+        done: had ? had.done : false
+      };
+      const seed = !had && carry && carry.values ? carry.values(i) : '';
+      if (seed){
+        if (ex.isTime) set.value1 = seed;
+        else set.value2 = seed;
+        set.seed = seed;
+      }
+      return set;
+    })
   };
 }
 function chooseSwap(type, slotIndex, name){
@@ -3036,24 +3141,215 @@ function chooseSwap(type, slotIndex, name){
   render();
   saveAll();
 }
-function swapList(type, slotIndex, current){
+function swapList(type, slotIndex, current, today){
   const key = type + ':' + slotIndex;
   if (swapOpen !== key) return '';
-  const options = alternatives(type, slotIndex);
+  const options = alternatives(type, slotIndex, today);
   if (options.length < 2) return '<p class="swap-note">Для этого движения замен нет.</p>';
+  const planned = ((program[type] || []).find(e => e.slot === slotIndex) || {}).name;
+  const pick = today ? 'pickSwap' : 'chooseSwap';
   return `
     <div class="swap-list">
+      ${today ? `<p class="swap-note" style="margin:0 0 4px;">${swapRemember
+        ? 'Замена останется и на следующие тренировки.'
+        : 'Замена только на эту тренировку — в программе всё останется как есть.'}</p>` : ''}
       ${options.map(v => `
-        <button class="swap-option ${v.name === current ? 'on' : ''}" onclick="chooseSwap('${type}',${slotIndex},'${v.name.replace(/'/g, "\\'")}')">
-          <span>${v.name}<span class="swap-eq">${EQ_LABELS[v.eq]}</span></span>
+        <button class="swap-option ${v.name === current ? 'on' : ''}" onclick="${pick}('${type}',${slotIndex},'${v.name.replace(/'/g, "\\'")}')">
+          <span>${v.name}<span class="swap-eq">${EQ_LABELS[v.eq]}${today && v.name === planned && v.name !== current ? ' · по программе' : ''}</span></span>
           ${v.name === current ? `<span class="check">${icon('check')}</span>` : ''}
         </button>
       `).join('')}
+      ${today ? `
+        <button class="swap-option" onclick="toggleSwapRemember()">
+          <span>Запомнить и на следующие тренировки</span>
+          <span class="switch ${swapRemember ? 'on' : ''}"></span>
+        </button>
+      ` : ''}
       ${swaps[key] ? `<button class="swap-option auto" onclick="chooseSwap('${type}',${slotIndex},'')">Выбрать за меня</button>` : ''}
     </div>
   `;
 }
+function toggleSwapRemember(){
+  swapRemember = !swapRemember;
+  render();
+}
+// Посреди тренировки замена по умолчанию только на сегодня: тренажёр занят
+// сейчас, а не навсегда. Хочется насовсем — переключатель в списке.
+function pickSwap(type, slotIndex, name){
+  if (swapRemember || !draft || activeType !== type) return chooseSwap(type, slotIndex, name);
+  const at = draft.findIndex(e => e.slot === slotIndex && !e.custom);
+  if (at < 0) return;
+  // Собираем упражнение по правилам программы, но замену не запоминаем.
+  const keep = swaps;
+  let entry = null;
+  try {
+    swaps = { ...swaps, [type + ':' + slotIndex]: name };
+    entry = (buildProgram(profile)[type] || []).find(e => e.slot === slotIndex);
+  } finally {
+    swaps = keep;
+  }
+  if (!entry || entry.name !== name) return;
+  const planned = ((program[type] || []).find(e => e.slot === slotIndex) || {}).name;
+  draft[at] = { ...draftExercise(entry, null, draftDate || todayStr()), planned: name === planned ? null : planned };
+  swapOpen = null;
+  render();
+  saveAll();
+}
+// Всё, что умеет приложение: упражнения программы, справочник и свои —
+// с учётом инвентаря, который человек назвал в анкете.
+function libraryItems(){
+  const rank = EQ_RANK[(profile && profile.place) || 'gym'];
+  const items = new Map();
+  Object.keys(SLOTS).forEach(t => SLOTS[t].forEach(slot => slot.variants.forEach(v => {
+    if (EQ_RANK[v.eq] <= rank && !items.has(v.name)) items.set(v.name, { name: v.name, eq: v.eq, role: v.role });
+  })));
+  custom.forEach(c => {
+    if (!items.has(c.name)) items.set(c.name, { name: c.name, eq: null, role: c.isTime ? 'time' : 'iso', own: c });
+  });
+  return [...items.values()];
+}
+// Настройки упражнения, которое добавляют на сегодня. Если оно есть в программе
+// этого дня — берём его оттуда, вместе с местом и переопределениями.
+function extraEntry(item){
+  const inProgram = (program[activeType] || []).find(e => e.name === item.name);
+  if (inProgram){
+    const slotBusy = inProgram.slot != null && draft.some(e => e.slot === inProgram.slot);
+    return slotBusy ? { ...inProgram, slot: null } : inProgram;
+  }
+  if (item.own){
+    const c = item.own;
+    return { name: c.name, sets: 3, repsMin: c.isTime ? 30 : 8, repsMax: c.isTime ? 45 : 12, isTime: !!c.isTime, slot: null, custom: c.id };
+  }
+  if (!profile) return { name: item.name, sets: 3, repsMin: 8, repsMax: 12, isTime: item.role === 'time', slot: null };
+  const tags = profileTags(profile);
+  const reps = REPS[tags.has('caution') ? 'health' : profile.goal];
+  return { name: item.name, ...planFor(item.role, profile, tags, stageInfo(profile), reps), slot: null };
+}
+function openOrder(){
+  orderMode = true;
+  addOpen = false;
+  removeArmed = null;
+  render();
+  window.scrollTo(0, 0);
+}
+function closeOrder(){
+  orderMode = false;
+  addOpen = false;
+  addQuery = '';
+  addGroup = '';
+  removeArmed = null;
+  render();
+}
+function moveExercise(idx, dir){
+  const to = idx + dir;
+  if (!draft || to < 0 || to >= draft.length) return;
+  [draft[idx], draft[to]] = [draft[to], draft[idx]];
+  render();
+  saveAll();
+}
+function hasProgress(ex){
+  return ex.sets.some(s => s.done || (Number(ex.isTime ? s.value1 : s.value2) > 0 && !isAuto(s)));
+}
+// Убираем упражнение только из сегодняшней тренировки. Если по нему уже
+// что-то записано, просим нажать ещё раз.
+function removeFromWorkout(idx){
+  const ex = draft[idx];
+  if (!ex || draft.length < 2) return;
+  if (hasProgress(ex) && removeArmed !== ex.name){
+    removeArmed = ex.name;
+    render();
+    setTimeout(() => { if (removeArmed === ex.name){ removeArmed = null; render(); } }, 4000);
+    return;
+  }
+  removeArmed = null;
+  draft.splice(idx, 1);
+  render();
+  saveAll();
+}
+function openAdd(){
+  addOpen = true;
+  addQuery = '';
+  addGroup = '';
+  render();
+}
+function closeAdd(){
+  addOpen = false;
+  render();
+}
+function setAddGroup(group){
+  addGroup = addGroup === group ? '' : group;
+  render();
+}
+function setAddQuery(value){
+  addQuery = value;
+  // Перерисовываем только список: полная перерисовка сбросила бы фокус с поля поиска.
+  const box = document.getElementById('add-results');
+  if (box) box.innerHTML = addResults();
+}
+function addResults(){
+  const q = addQuery.trim().toLowerCase();
+  const have = new Set(draft.map(e => e.name));
+  const list = libraryItems().filter(it => !have.has(it.name)
+    && (!addGroup || groupOf(it.name) === addGroup)
+    && (!q || it.name.toLowerCase().includes(q)));
+  if (!list.length) return '<p class="swap-note">Ничего не нашлось.</p>';
+  return list.map(it => `
+    <button class="swap-option" onclick="addToWorkout('${it.name.replace(/'/g, "\\'")}')">
+      <span>${escapeHtml(it.name)}<span class="swap-eq">${groupOf(it.name) || 'без группы'}${it.eq ? ' · ' + EQ_LABELS[it.eq] : ' · своё'}</span></span>
+    </button>
+  `).join('');
+}
+function addToWorkout(name){
+  const item = libraryItems().find(it => it.name === name);
+  if (!item || !draft || draft.some(e => e.name === name)) return;
+  draft.push({ ...draftExercise(extraEntry(item), null, draftDate || todayStr()), extra: true });
+  addOpen = false;
+  addQuery = '';
+  addGroup = '';
+  render();
+  saveAll();
+}
+function renderOrder(){
+  const rows = draft.map((ex, i) => {
+    const done = ex.sets.filter(x => x.done).length;
+    const note = [
+      done ? `${done} из ${ex.sets.length} подходов` : `${ex.sets.length} ${plural(ex.sets.length, ['подход', 'подхода', 'подходов'])}`,
+      ex.planned ? 'замена на сегодня' : ex.extra ? 'добавлено на сегодня' : ''
+    ].filter(Boolean).join(' · ');
+    return `
+      <div class="order-row">
+        <span class="order-name"><b>${escapeHtml(ex.name)}</b><span>${note}</span></span>
+        <button class="order-move" onclick="moveExercise(${i},-1)" ${i === 0 ? 'disabled' : ''} aria-label="Выше">↑</button>
+        <button class="order-move" onclick="moveExercise(${i},1)" ${i === draft.length - 1 ? 'disabled' : ''} aria-label="Ниже">↓</button>
+        <button class="order-remove" onclick="removeFromWorkout(${i})" ${draft.length < 2 ? 'disabled' : ''}>${removeArmed === ex.name ? 'Точно?' : 'Убрать'}</button>
+      </div>
+    `;
+  }).join('');
+  const groupChips = ['', ...GROUPS].map(g => `
+    <button class="${addGroup === g ? 'on' : ''}" onclick="setAddGroup('${g}')">${g || 'Все'}</button>
+  `).join('');
+  const picker = addOpen ? `
+    <div class="add-panel">
+      <input class="text-input" type="text" id="add-search" placeholder="Найти упражнение" value="${escapeHtml(addQuery)}" oninput="setAddQuery(this.value)">
+      <div class="days" style="padding:12px 0 6px;">${groupChips}</div>
+      <div class="swap-list" id="add-results" style="margin-top:6px;">${addResults()}</div>
+      <button class="btn-ghost" style="display:block; margin:6px auto 0; color:var(--accent);" onclick="closeAdd()">Свернуть список</button>
+    </div>
+  ` : `<button class="add-warmup" style="margin-top:12px;" onclick="openAdd()">＋ Добавить упражнение</button>`;
+  return `
+    <div class="card">
+      <div class="wo-head">
+        <p class="eyebrow">Порядок и состав</p>
+      </div>
+      <p class="swap-note" style="margin-top:0;">Стрелками меняйте порядок, «Убрать» пропускает упражнение только на сегодня. Всё, что уже записано, сохранится. Вернуть убранное можно через «Добавить».</p>
+      ${rows}
+      ${picker}
+    </div>
+    <button class="btn btn-primary" onclick="closeOrder()">Готово</button>
+  `;
+}
 function startWorkout(type, prefill){
+  orderMode = false; addOpen = false; swapRemember = false;
   activeType = type;
   draftDate = null;
   draftNote = (prefill && prefill.note) || '';
@@ -3071,6 +3367,7 @@ function editSession(date){
   const entry = sessions.find(s => s.date === date);
   if (!entry) return;
   const inProgram = activeDays().flatMap(type => program[type] || []);
+  orderMode = false; addOpen = false; swapRemember = false;
   activeType = entry.type;
   draftDate = date === todayStr() ? null : date;
   draftNote = entry.note || '';
@@ -3117,10 +3414,12 @@ async function deleteSession(date){
   await saveAll();
 }
 function resumeWorkout(){
+  orderMode = false; addOpen = false;
   view = 'workout';
   render();
 }
 async function cancelWorkout(){
+  orderMode = false; addOpen = false;
   stopRest();
   const edited = draftDate;
   activeType = null; draft = null; draftDate = null; draftNote = '';
@@ -3140,15 +3439,20 @@ async function finishWorkout(){
       // Группу мышц храним в записи: своё упражнение могли потом убрать,
       // но прошлая нагрузка от этого никуда не делась.
       ...(ex.group ? { group: ex.group } : {}),
-      sets: ex.sets.map(s => ({
-        value1: s.value1 || '0',
-        value2: s.value2 || '0',
-        done: s.done,
-        ...(s.warmup ? { warmup: true } : {}),
-        ...(s.drop ? { drop: true } : {})
-      }))
+      sets: ex.sets.map(s => {
+        // Серые цифры, которые так и не подтвердили, — это не сделанный подход.
+        const auto = isAuto(s);
+        return {
+          value1: (auto && ex.isTime ? '' : s.value1) || '0',
+          value2: (auto && !ex.isTime ? '' : s.value2) || '0',
+          done: s.done,
+          ...(s.warmup ? { warmup: true } : {}),
+          ...(s.drop ? { drop: true } : {})
+        };
+      })
     }))
   };
+  orderMode = false; addOpen = false;
   stopRest();
   sessions = sessions.filter(s => s.date !== entry.date);
   sessions.push(entry);
@@ -3342,10 +3646,18 @@ function removeSet(exIdx, setIdx){
   saveAll();
 }
 // Пара — это ровно два упражнения, а не цепочка: третье к ней не прицепится.
+// Пара — это «со следующим по программе». Если сегодня порядок поменяли или
+// соседа убрали, пара не работает, а сама настройка в программе остаётся.
+function followsInProgram(a, b){
+  const list = program[activeType] || [];
+  const at = list.findIndex(e => e.slot === a.slot);
+  return at >= 0 && !!list[at + 1] && list[at + 1].slot === b.slot;
+}
 function pairedNext(idx){
   const a = draft && draft[idx];
   const b = draft && draft[idx + 1];
   if (!advancedOn() || !a || !b || a.slot == null || b.slot == null) return false;
+  if (!followsInProgram(a, b)) return false;
   if (!pairs[activeType + ':' + a.slot]) return false;
   return !pairedPrev(idx);
 }
@@ -3355,7 +3667,7 @@ function pairedPrev(idx){
 function canPair(idx){
   const a = draft[idx];
   const b = draft[idx + 1];
-  return advancedOn() && !!b && a.slot != null && b.slot != null && !pairedPrev(idx);
+  return advancedOn() && !!b && a.slot != null && b.slot != null && followsInProgram(a, b) && !pairedPrev(idx);
 }
 function togglePair(idx){
   const key = activeType + ':' + draft[idx].slot;
@@ -3396,12 +3708,26 @@ function addWarmup(exIdx){
   saveAll();
 }
 function setVal(exIdx, setIdx, field, value){
-  draft[exIdx].sets[setIdx][field] = value;
+  const ex = draft[exIdx];
+  const set = ex.sets[setIdx];
+  set[field] = value;
+  // Подставленным считается только то поле, которое подставили: вес можно
+  // поменять, а повторения останутся серыми, пока их не подтвердят.
+  if (set.seed != null && field === (ex.isTime ? 'value1' : 'value2')){
+    set.touched = true;
+    seenAuto();
+  }
   scheduleSave();
+}
+function seenAuto(){
+  if (autoSeen) return;
+  autoSeen = true;
+  try { localStorage.setItem('auto-seen', '1'); } catch (e) {}
 }
 function toggleDone(exIdx, setIdx){
   const ex = draft[exIdx];
   const set = ex.sets[setIdx];
+  if (isAuto(set)) seenAuto();
   set.done = !set.done;
   if (set.done){
     const record = exerciseRecord(ex.name, todayStr());
@@ -3604,6 +3930,7 @@ function renderToday(){
 
 
 function renderWorkout(){
+  if (orderMode) return renderOrder();
   const exercisesHtml = draft.map((ex, exIdx) => {
     const perf = lastPerformance(ex.name, todayStr());
     const prevNote = lastNote(ex.name, draftDate || todayStr());
@@ -3642,7 +3969,7 @@ function renderWorkout(){
         return `
           <div class="set-row${beats[setIdx] ? ' record' : ''}${s.warmup ? ' warmup' : ''}">
             ${tag}
-            <input type="number" inputmode="numeric" placeholder="0" value="${s.value1}"
+            <input type="number" inputmode="numeric" placeholder="0" value="${s.value1}" class="${isAuto(s) ? 'auto' : ''}"
               oninput="setVal(${exIdx},${setIdx},'value1',this.value)">
             <span class="unit">сек</span>
             <button class="done-toggle ${s.done?'on':''}" onclick="toggleDone(${exIdx},${setIdx})">${s.done?'✓':''}</button>
@@ -3655,7 +3982,7 @@ function renderWorkout(){
           <input type="number" inputmode="decimal" placeholder="кг" value="${s.value1}"
             oninput="setVal(${exIdx},${setIdx},'value1',this.value)">
           <span class="unit">кг</span>
-          <input type="number" inputmode="numeric" placeholder="повт." value="${s.value2}"
+          <input type="number" inputmode="numeric" placeholder="повт." value="${s.value2}" class="${isAuto(s) ? 'auto' : ''}"
             oninput="setVal(${exIdx},${setIdx},'value2',this.value)">
           <button class="done-toggle ${s.done?'on':''}" onclick="toggleDone(${exIdx},${setIdx})">${s.done?'✓':''}</button>
         </div>
@@ -3681,7 +4008,9 @@ function renderWorkout(){
           </div>
         </div>
         ${howtoCard(ex.name)}
-        ${ex.slot != null && !ex.custom ? swapList(activeType, ex.slot, ex.name) : ''}
+        ${ex.slot != null && !ex.custom ? swapList(activeType, ex.slot, ex.name, true) : ''}
+        ${ex.planned ? `<p class="swap-note" style="margin:0 0 6px;">Замена на сегодня · по программе: ${escapeHtml(ex.planned)}</p>` : ''}
+        ${ex.extra ? `<p class="swap-note" style="margin:0 0 6px;">Добавлено на сегодня</p>` : ''}
         <p class="last-time">${hintText(perf)}</p>
         ${prevNote ? `<p class="prev-note">💬 ${dayText(prevNote.date, true)}: ${escapeHtml(prevNote.note)}</p>` : ''}
         ${adviceHtml}
@@ -3709,9 +4038,16 @@ function renderWorkout(){
     ? `<p class="adv-hint" style="margin:8px 0 16px;">Мало времени? Кнопка <b>«в паре со следующим»</b> под подходами соединит два упражнения в суперсет: делаете их по очереди, отдых один — после пары.</p>`
     : '';
 
+  const autoHint = !autoSeen && draft.some(e => e.sets.some(isAuto))
+    ? `<p class="adv-hint" style="margin:8px 0 16px;">Серые цифры — как в прошлый раз. Сделали так же — нажмите галочку, иначе впишите своё. Серые подходы без галочки в дневник не попадут.</p>`
+    : '';
   return `
     <div class="card">
-      <p class="eyebrow">${TYPE_LABELS[activeType]}${draftDate ? ' · ' + dayText(draftDate) : ''}</p>
+      <div class="wo-head">
+        <p class="eyebrow">${TYPE_LABELS[activeType]}${draftDate ? ' · ' + dayText(draftDate) : ''}</p>
+        <button class="wo-edit" onclick="openOrder()">Порядок и состав</button>
+      </div>
+      ${autoHint}
       ${pairHint}
       ${exercisesHtml}
     </div>
