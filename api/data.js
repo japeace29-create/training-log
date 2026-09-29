@@ -169,7 +169,10 @@ module.exports = async (req, res) => {
     }
 
     if (req.method === 'POST') {
-      await kvSet(key, JSON.stringify(normalize(req.body || {})));
+      const clean = normalize(req.body || {});
+      await kvSet(key, JSON.stringify(clean));
+      // Вызовам нужен часовой пояс, а читать ради него весь дневник дорого.
+      if (clean.tz) await kvCommand(['SET', 'training-log:tz:' + userId, clean.tz]);
       res.status(200).json({ ok: true });
       return;
     }

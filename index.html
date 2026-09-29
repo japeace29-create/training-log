@@ -171,10 +171,11 @@
     margin:0 auto;
     padding:calc(env(safe-area-inset-top) + 14px) 16px calc(env(safe-area-inset-bottom) + 32px);
   }
-  header{margin:6px 4px 14px;}
+  header{margin:6px 4px 14px; display:flex; align-items:center; justify-content:space-between; gap:12px;}
   h1{
     font-family:var(--font-display);
-    font-size:30px;
+    /* Справа теперь кружок «Вызов»: на узком экране заголовок чуть уменьшается, но в одну строку. */
+    font-size:clamp(19px, calc((100vw - 112px) / 10.5), 30px);
     font-weight:700;
     letter-spacing:0.2px;
     margin:0;
@@ -703,6 +704,102 @@
   .text-input::placeholder{color:var(--text-faint);}
   .field-label{font-size:13px; color:var(--text-muted); margin:16px 0 8px;}
   /* Нагрузка по мышцам: один ряд — одна группа, число стоит рядом со шкалой. */
+  .challenge-btn{
+    position:relative;
+    flex:0 0 auto;
+    width:56px;
+    height:56px;
+    padding:0;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    gap:1px;
+    border-radius:50%;
+    border:1px solid var(--glass-edge);
+    background:var(--glass);
+    -webkit-backdrop-filter:saturate(200%) blur(24px);
+    backdrop-filter:saturate(200%) blur(24px);
+    box-shadow:0 6px 18px rgba(0,0,0,0.12);
+    color:var(--orange);
+    font:inherit;
+    cursor:pointer;
+  }
+  .challenge-btn .ico{width:22px; height:22px; stroke-width:2;}
+  .challenge-btn span{font-size:10px; font-weight:700; letter-spacing:-0.1px; color:var(--text);}
+  .challenge-btn.on{background:rgba(255,146,48,0.22);}
+  .challenge-btn .badge{
+    position:absolute;
+    top:-3px;
+    right:-3px;
+    min-width:20px;
+    height:20px;
+    padding:0 5px;
+    box-sizing:border-box;
+    border-radius:10px;
+    background:var(--red);
+    color:#fff;
+    font-size:12px;
+    font-weight:700;
+    line-height:20px;
+    text-align:center;
+  }
+  .link-back{
+    display:block;
+    margin:0 0 12px 4px;
+    padding:4px 0;
+    border:none;
+    background:none;
+    color:var(--accent);
+    font:inherit;
+    font-size:16px;
+    cursor:pointer;
+  }
+  .ch-card{
+    display:block;
+    width:100%;
+    text-align:left;
+    margin:0 0 10px;
+    padding:14px 16px;
+    border:none;
+    border-radius:var(--radius-l);
+    background:var(--surface);
+    color:var(--text);
+    font:inherit;
+    cursor:pointer;
+  }
+  .ch-top{display:flex; justify-content:space-between; align-items:baseline; gap:10px;}
+  .ch-top b{font-size:17px; font-weight:600;}
+  .ch-end{font-size:13px; color:var(--text-muted); white-space:nowrap;}
+  .ch-meta{display:block; font-size:13px; color:var(--text-muted); margin:3px 0 8px;}
+  .ch-score{margin:0 0 8px; font-size:15px;}
+  .ch-score b{font-weight:600; font-variant-numeric:tabular-nums;}
+  .ch-pill{display:inline-block; font-size:12px; font-weight:600; padding:3px 10px; border-radius:8px; background:var(--surface-2); color:var(--text-muted);}
+  .ch-pill.warn{background:rgba(255,146,48,0.20); color:var(--orange);}
+  .ch-pill.ok{background:var(--green-tint); color:var(--green);}
+  .ch-pill.bad{background:rgba(255,66,69,0.16); color:var(--red);}
+  .ch-row{display:flex; align-items:baseline; gap:10px; padding:10px 0; border-bottom:0.5px solid var(--separator);}
+  .ch-row:last-child{border-bottom:none;}
+  .ch-name{flex:1; min-width:0; display:flex; flex-direction:column; font-size:16px; font-weight:600;}
+  .ch-name small{font-size:12px; font-weight:400; color:var(--orange);}
+  .ch-best{flex:0 0 auto; text-align:right; font-size:17px; white-space:nowrap; font-variant-numeric:tabular-nums;}
+  .ch-best i{font-style:normal; font-size:14px; color:var(--text-muted);}
+  .ch-winner{display:flex; align-items:center; gap:12px; color:var(--orange);}
+  .ch-winner .ico{width:34px; height:34px;}
+  .ch-winner p{margin:0; font-size:20px; font-weight:700; color:var(--text);}
+  .ch-attempt-head{display:flex; justify-content:space-between; align-items:baseline; gap:8px; font-size:16px;}
+  .ch-state{font-size:12px; font-weight:600; color:var(--text-muted); text-align:right; white-space:nowrap;}
+  .ch-state.ok{color:var(--green);}
+  .ch-state.no,.ch-state.held{color:var(--red);}
+  .ch-state.need_video,.ch-state.review{color:var(--orange);}
+  .ch-time{margin:2px 0 0; font-size:12px; color:var(--text-muted);}
+  .ch-code{display:flex; align-items:center; justify-content:space-between; margin-top:12px; padding:12px 14px; border-radius:14px; background:var(--surface-2);}
+  .ch-code span{font-size:14px; color:var(--text-muted);}
+  .ch-code b{font-size:28px; letter-spacing:4px; font-variant-numeric:tabular-nums;}
+  .yt-thumb, .yt-frame{position:relative; display:block; width:100%; aspect-ratio:16/9; margin-top:10px; border-radius:12px; overflow:hidden; background:#000; padding:0; border:none;}
+  .yt-thumb img, .yt-frame iframe{position:absolute; inset:0; width:100%; height:100%; border:0; object-fit:cover;}
+  .yt-play{position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:#fff;}
+  .yt-play .ico{width:44px; height:44px; fill:#fff; stroke:none; filter:drop-shadow(0 2px 6px rgba(0,0,0,0.5));}
   .photo-grid{display:grid; grid-template-columns:repeat(3, 1fr); gap:6px;}
   .photo-pair{display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:10px;}
   .photo-cap{margin:6px 0 0; text-align:center; font-size:12px; color:var(--text-muted);}
@@ -1447,7 +1544,8 @@ const ICONS = {
   check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
   send: '<path d="M21 3.5 3 10.8l6.8 2.4L12.2 20z"/><path d="M9.8 13.2 21 3.5"/>',
   stairs: '<path d="M3 19h5v-4.5h5V10h5V5.5h3"/>',
-  chart: '<path d="M5 19V9"/><path d="M12 19V5"/><path d="M19 19v-6"/>'
+  chart: '<path d="M5 19V9"/><path d="M12 19V5"/><path d="M19 19v-6"/>',
+  trophy: '<path d="M7.5 4h9v5.5a4.5 4.5 0 0 1-9 0V4z"/><path d="M7.5 6H4.8v1.2a3 3 0 0 0 3 3"/><path d="M16.5 6h2.7v1.2a3 3 0 0 1-3 3"/><path d="M12 14v4"/><path d="M8 20h8"/>'
 };
 function icon(name){
   return '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true">' + ICONS[name] + '</svg>';
@@ -2260,7 +2358,7 @@ function applyData(data){
     draftClock = null;
     // Бот умеет открыть приложение сразу на нужной вкладке.
     const wanted = new URLSearchParams(location.search).get('tab');
-    view = TABS.some(t => t.id === wanted) ? wanted : 'today';
+    view = TABS.some(t => t.id === wanted) ? wanted : (wanted === 'compete' ? 'compete' : 'today');
   }
 }
 // Записи, сделанные без сети, могли разойтись с сервером (например, человек
@@ -2552,6 +2650,409 @@ function openBotChat(){
 }
 function photoDate(at, short){
   return dayText(todayStr(new Date(at)), short);
+}
+// ---------- Вызовы ----------------------------------------------------------------------
+// Соревнование двух человек: результат считается только с видео, которое проверяет соперник.
+const CHALLENGE_UNITS = ['повторений', 'секунд', 'минут', 'кг', 'метров'];
+let challenges = [];
+let challengesState = '';
+let challenge = null;         // открытая карточка вызова — ответ сервера
+let challengeId = null;
+let competeNote = '';         // что сказал сервер на последнее действие
+let competeBusy = false;
+let competeBadge = 0;         // сколько дел ждёт: видео на проверку и попытки без видео
+let myNick = '';
+let nickDraft = null;         // null — поле показывает сохранённое имя
+let joinCode = '';
+let newChallenge = null;
+let attemptValue = '';
+let ytLink = '';
+let videoOpen = null;         // попытка, у которой открыт плеер YouTube
+let armed = null;             // действие, которое ждёт второго нажатия: 'cancel' или 'report:<id>'
+async function competeCall(query, body){
+  const res = await fetch('/api/compete' + (query || ''), body
+    ? { method: 'POST', headers: apiHeaders(), body: JSON.stringify(body) }
+    : { headers: apiHeaders() });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'Ошибка сервера ' + res.status);
+  return data;
+}
+// Действие с сервером: пока идёт, кнопки не нажимаются, ошибка показывается в карточке.
+async function competeAct(fn){
+  if (competeBusy) return;
+  competeBusy = true;
+  competeNote = '';
+  render();
+  try { await fn(); } catch (e) { competeNote = e.message; }
+  competeBusy = false;
+  render();
+}
+function defaultNick(){
+  return String((session && session.name) || '').replace(/^@/, '').slice(0, 24);
+}
+async function refreshBadge(){
+  if (!session) return;
+  try {
+    const data = await competeCall('?badge=1');
+    if (data.n !== competeBadge){
+      competeBadge = data.n;
+      render();
+    }
+  } catch (e) { /* без связи значок просто не обновится */ }
+}
+async function loadChallenges(){
+  if (!challenges.length) challengesState = 'loading';
+  if (view === 'compete') render();
+  try {
+    const data = await competeCall('');
+    challenges = data.challenges || [];
+    myNick = data.nick || '';
+    challengesState = 'ok';
+  } catch (e) {
+    challengesState = 'error';
+  }
+  if (view === 'compete') render();
+  refreshBadge();
+}
+function openCompete(){
+  view = 'compete';
+  competeNote = '';
+  armed = null;
+  render();
+  window.scrollTo(0, 0);
+  loadChallenges();
+}
+async function reloadChallenge(){
+  try {
+    challenge = await competeCall('?id=' + encodeURIComponent(challengeId));
+  } catch (e) {
+    competeNote = e.message;
+  }
+  if (view === 'challenge') render();
+  refreshBadge();
+}
+function openChallenge(id){
+  challengeId = id;
+  challenge = null;
+  view = 'challenge';
+  competeNote = '';
+  attemptValue = '';
+  ytLink = '';
+  videoOpen = null;
+  armed = null;
+  render();
+  window.scrollTo(0, 0);
+  reloadChallenge();
+}
+function closeChallenge(){
+  openCompete();
+}
+function openNewChallenge(){
+  const end = addDays(todayStr(), 7);
+  newChallenge = { title: '', dir: 'max', unit: 'повторений', end };
+  competeNote = '';
+  view = 'challenge-new';
+  render();
+  window.scrollTo(0, 0);
+}
+function setNewChallenge(field, value){
+  newChallenge[field] = value;
+  render();
+}
+function saveNick(){
+  return competeAct(async () => {
+    const nick = String(nickDraft != null ? nickDraft : (myNick || defaultNick())).trim();
+    await competeCall('', { action: 'nick', nick });
+    myNick = nick;
+    nickDraft = null;
+    competeNote = 'Имя сохранено';
+  });
+}
+function joinByCode(){
+  return competeAct(async () => {
+    const data = await competeCall('', { action: 'join', code: joinCode, nick: myNick || defaultNick() });
+    joinCode = '';
+    openChallenge(data.comp);
+  });
+}
+function createChallenge(){
+  return competeAct(async () => {
+    const data = await competeCall('', { action: 'create', ...newChallenge, nick: myNick || defaultNick() });
+    openChallenge(data.comp);
+  });
+}
+function submitAttempt(){
+  return competeAct(async () => {
+    await competeCall('', { action: 'attempt', comp: challengeId, value: attemptValue });
+    attemptValue = '';
+    await reloadChallenge();
+  });
+}
+function sendYtLink(attemptId){
+  return competeAct(async () => {
+    await competeCall('', { action: 'link', comp: challengeId, attempt: attemptId, link: ytLink });
+    ytLink = '';
+    competeNote = 'Ссылка принята. Соперник получил видео и проверит его.';
+    await reloadChallenge();
+  });
+}
+function decideAttempt(attemptId, verdict){
+  return competeAct(async () => {
+    await competeCall('', { action: 'decide', comp: challengeId, attempt: attemptId, verdict });
+    competeNote = verdict === 'ok' ? 'Засчитано' : 'Не засчитано. Соперник получит сообщение.';
+    await reloadChallenge();
+  });
+}
+function reportAttempt(attemptId){
+  if (armed !== 'report:' + attemptId){
+    armed = 'report:' + attemptId;
+    render();
+    setTimeout(() => { if (armed === 'report:' + attemptId){ armed = null; if (view === 'challenge') render(); } }, 4000);
+    return;
+  }
+  armed = null;
+  return competeAct(async () => {
+    await competeCall('', { action: 'report', comp: challengeId, attempt: attemptId });
+    competeNote = 'Жалоба отправлена, видео скрыто до решения модератора.';
+    await reloadChallenge();
+  });
+}
+function watchAttempt(attemptId){
+  return competeAct(async () => {
+    await competeCall('', { action: 'watch', comp: challengeId, attempt: attemptId });
+    competeNote = 'Видео отправлено вам в чат с ботом.';
+  });
+}
+function cancelChallenge(){
+  if (armed !== 'cancel'){
+    armed = 'cancel';
+    render();
+    setTimeout(() => { if (armed === 'cancel'){ armed = null; if (view === 'challenge') render(); } }, 4000);
+    return;
+  }
+  armed = null;
+  return competeAct(async () => {
+    await competeCall('', { action: 'cancel', comp: challengeId });
+    closeChallenge();
+  });
+}
+function playYouTube(attemptId){
+  videoOpen = attemptId;
+  render();
+}
+async function inviteLink(){
+  if (!botName){
+    try { botName = (await fetch('/api/auth').then(r => r.json())).bot || ''; } catch (e) {}
+  }
+  return botName && challenge && challenge.comp.code ? 'https://t.me/' + botName + '?start=join_' + challenge.comp.code : '';
+}
+async function shareInvite(){
+  const link = await inviteLink();
+  if (!link){
+    competeNote = 'Не получилось собрать ссылку — попробуйте ещё раз';
+    render();
+    return;
+  }
+  const text = 'Вызываю тебя на «' + challenge.comp.title + '». Прими вызов по ссылке:';
+  const url = 'https://t.me/share/url?url=' + encodeURIComponent(link) + '&text=' + encodeURIComponent(text);
+  const tg = window.Telegram && window.Telegram.WebApp;
+  if (tg && tg.openTelegramLink && TG_INIT_DATA) tg.openTelegramLink(url);
+  else window.open(url, '_blank', 'noopener');
+}
+async function copyInvite(){
+  const link = await inviteLink();
+  let copied = false;
+  try { await navigator.clipboard.writeText(link); copied = true; } catch (e) { /* покажем ссылку текстом */ }
+  competeNote = copied ? 'Ссылка скопирована' : 'Не удалось скопировать — выделите ссылку и скопируйте: ' + link;
+  render();
+}
+const CHALLENGE_STATUS = { need_video: 'ждёт видео', review: 'на проверке', ok: 'засчитано', no: 'не засчитано', held: 'жалоба, решает модератор' };
+function valueText(v, unit){
+  return kgText(v) + ' ' + unit;
+}
+function endText(date){
+  return 'до ' + dayText(date, true);
+}
+function challengeCard(c){
+  const pill = c.status === 'open' ? ['wait', 'ждёт соперника']
+    : c.status === 'finished' ? [c.result === 'win' ? 'ok' : c.result === 'lose' ? 'bad' : 'wait', c.result === 'win' ? 'вы победили' : c.result === 'lose' ? 'вы проиграли' : 'ничья']
+    : c.status === 'cancelled' ? ['idle', 'отменён']
+    : c.status === 'expired' ? ['idle', 'никто не принял']
+    : c.review ? ['warn', 'проверьте видео']
+    : c.needVideo ? ['warn', 'нужно видео']
+    : ['wait', 'идёт'];
+  const score = c.status === 'open' || c.status === 'cancelled' || c.status === 'expired' ? ''
+    : `<p class="ch-score">${escapeHtml(c.opponent || 'Соперник')} <b>${c.them == null ? '—' : kgText(c.them)}</b> · Вы <b>${c.me == null ? '—' : kgText(c.me)}</b></p>`;
+  return `
+    <button class="ch-card" onclick="openChallenge('${c.id}')">
+      <span class="ch-top"><b>${escapeHtml(c.title)}</b><span class="ch-end">${endText(c.end)}</span></span>
+      <span class="ch-meta">${c.opponent ? 'Вы и ' + escapeHtml(c.opponent) : 'Пока без соперника'} · ${c.dir === 'min' ? 'кто быстрее' : 'кто больше'}, ${c.unit}</span>
+      ${score}
+      <span class="ch-pill ${pill[0]}">${pill[1]}</span>
+    </button>
+  `;
+}
+function renderCompete(){
+  const nick = nickDraft != null ? nickDraft : (myNick || defaultNick());
+  return `
+    <div class="card">
+      <p class="eyebrow">Ваше имя в вызовах</p>
+      <div class="weight-form">
+        <input type="text" maxlength="24" value="${escapeHtml(nick)}" oninput="nickDraft = this.value"
+          onkeydown="if (event.key === 'Enter') saveNick()">
+        <button class="btn btn-outline" onclick="saveNick()" ${competeBusy ? 'disabled' : ''}>Сохранить</button>
+      </div>
+      ${competeNote ? `<p class="swap-note" style="margin:10px 0 0;">${escapeHtml(competeNote)}</p>` : ''}
+    </div>
+    <button class="btn btn-primary" style="margin-bottom:6px;" onclick="openNewChallenge()">Создать вызов</button>
+    <p class="section-title">Мои вызовы</p>
+    ${challenges.length ? challenges.map(challengeCard).join('')
+      : challengesState === 'loading' ? '<div class="card"><p class="empty" style="margin:0;">Загрузка…</p></div>'
+      : challengesState === 'error' ? '<div class="card"><p class="empty" style="margin:0;">Не удалось загрузить — нужна связь.</p></div>'
+      : '<div class="card"><p class="empty" style="margin:0;">Вызовов пока нет. Создайте первый и отправьте ссылку другу.</p></div>'}
+    <p class="section-title">Есть код приглашения?</p>
+    <div class="card">
+      <div class="weight-form">
+        <input type="text" placeholder="Код из приглашения" maxlength="10" value="${escapeHtml(joinCode)}" oninput="joinCode = this.value"
+          onkeydown="if (event.key === 'Enter') joinByCode()">
+        <button class="btn btn-outline" onclick="joinByCode()" ${competeBusy ? 'disabled' : ''}>Принять</button>
+      </div>
+    </div>
+    <p class="lib-note">Создайте вызов и отправьте другу ссылку: он примет её в Telegram. Результат записывается вместе с видео — пришлите его боту или вставьте ссылку на YouTube. Видео проверяет соперник, а без видео результат не считается.</p>
+  `;
+}
+function renderChallengeNew(){
+  const c = newChallenge || { title: '', dir: 'max', unit: 'повторений', end: addDays(todayStr(), 7) };
+  return `
+    <button class="link-back" onclick="openCompete()">‹ Все вызовы</button>
+    <div class="card">
+      <p class="eyebrow">Название</p>
+      <input class="text-input" type="text" maxlength="40" placeholder="Отжимания за минуту" value="${escapeHtml(c.title)}" oninput="newChallenge.title = this.value">
+      <p class="field-label">Что считаем</p>
+      <div class="segmented">
+        <button class="${c.dir === 'max' ? 'on' : ''}" onclick="setNewChallenge('dir','max')">Кто больше</button>
+        <button class="${c.dir === 'min' ? 'on' : ''}" onclick="setNewChallenge('dir','min')">Кто быстрее</button>
+      </div>
+      <p class="field-label">В чём меряем</p>
+      <div class="days" style="padding:0;flex-wrap:wrap;">
+        ${CHALLENGE_UNITS.map(u => `<button style="flex:1 1 30%;" class="${c.unit === u ? 'on' : ''}" onclick="setNewChallenge('unit','${u}')">${u}</button>`).join('')}
+      </div>
+      <p class="field-label">До какого числа</p>
+      <input class="text-input" type="date" min="${addDays(todayStr(), 1)}" max="${addDays(todayStr(), 60)}" value="${c.end}" onchange="newChallenge.end = this.value">
+      ${competeNote ? `<p class="quiz-error">${escapeHtml(competeNote)}</p>` : ''}
+      <button class="btn btn-primary" style="margin-top:16px;" onclick="createChallenge()" ${competeBusy ? 'disabled' : ''}>Создать и получить ссылку</button>
+    </div>
+    <p class="lib-note">В каждой попытке будет код из четырёх цифр: его нужно назвать вслух или показать в кадре. Так нельзя прислать старое видео. Видео проверяет соперник: он засчитывает результат или нет.</p>
+  `;
+}
+function attemptHtml(a, c){
+  const status = CHALLENGE_STATUS[a.status] || a.status;
+  const who = a.mine ? 'Вы' : escapeHtml(a.name);
+  let player = '';
+  if (a.video && a.video.kind === 'yt'){
+    player = videoOpen === a.id
+      ? `<div class="yt-frame"><iframe src="https://www.youtube.com/embed/${a.video.id}?autoplay=1&rel=0" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe></div>`
+      : `<button class="yt-thumb" onclick="playYouTube('${a.id}')" aria-label="Смотреть видео">
+           ${a.video.thumb ? `<img src="${escapeHtml(a.video.thumb)}" alt="">` : ''}<span class="yt-play">${icon('play')}</span>
+         </button>`;
+  } else if (a.video){
+    player = a.canReview || a.mine
+      ? `<button class="btn btn-outline" style="margin-top:10px;" onclick="watchAttempt('${a.id}')" ${competeBusy ? 'disabled' : ''}>${a.video.note ? 'Смотреть «кружок» в чате' : 'Смотреть видео в чате'}</button>`
+      : '';
+  }
+  const review = a.canReview ? `
+    <p class="swap-note" style="margin:10px 0 8px;">Проверьте: на видео видно, что результат выполнен, и слышно или видно код <b>${a.code}</b>.</p>
+    <div class="row-2">
+      <button class="btn btn-primary" style="font-size:15px;" onclick="decideAttempt('${a.id}','ok')" ${competeBusy ? 'disabled' : ''}>Засчитать</button>
+      <button class="btn btn-outline" style="font-size:15px;" onclick="decideAttempt('${a.id}','no')" ${competeBusy ? 'disabled' : ''}>Не засчитывать</button>
+    </div>
+    <button class="btn-ghost" style="margin-top:8px;" onclick="reportAttempt('${a.id}')">${armed === 'report:' + a.id ? 'Точно пожаловаться?' : 'Пожаловаться на видео'}</button>
+  ` : '';
+  const needVideo = a.mine && a.status === 'need_video' ? `
+    <div class="ch-code"><span>Код на видео</span><b>${a.code}</b></div>
+    <p class="swap-note" style="margin:8px 0;">Снимите попытку целиком и назовите код вслух или покажите его в кадре. Потом отправьте видео одним из способов.</p>
+    <button class="btn btn-outline" onclick="openBotChat()" ${botName ? '' : 'disabled'}>Отправить видео боту в Telegram</button>
+    <p class="field-label" style="margin:12px 0 6px;">Или ссылка на YouTube (код впишите в название ролика)</p>
+    <div class="weight-form">
+      <input type="text" inputmode="url" placeholder="https://youtu.be/…" value="${escapeHtml(ytLink)}" oninput="ytLink = this.value">
+      <button class="btn btn-outline" onclick="sendYtLink('${a.id}')" ${competeBusy ? 'disabled' : ''}>Отправить</button>
+    </div>
+  ` : '';
+  return `
+    <div class="ch-attempt ${a.status}">
+      <div class="ch-attempt-head">
+        <b>${valueText(a.value, c.unit)}</b>
+        <span class="ch-state ${a.status}">${status}</span>
+      </div>
+      <p class="ch-time">${who} · ${dayText(todayStr(new Date(a.at)), true)}</p>
+      ${player}${review}${needVideo}
+    </div>
+  `;
+}
+function renderChallenge(){
+  const back = `<button class="link-back" onclick="closeChallenge()">‹ Все вызовы</button>`;
+  if (!challenge){
+    return back + (competeNote ? `<div class="card"><p class="quiz-error" style="margin:0;">${escapeHtml(competeNote)}</p></div>` : '<div class="card"><p class="empty" style="margin:0;">Загрузка…</p></div>');
+  }
+  const c = challenge.comp;
+  const other = challenge.players.find(p => !p.me);
+  const mine = challenge.attempts.filter(a => a.mine);
+  const active = c.status === 'active';
+  const canAttempt = active && !mine.some(a => a.status === 'need_video') && mine.length < 5;
+  const statusText = { open: 'ждёт соперника', active: 'идёт', finished: 'завершён', cancelled: 'отменён', expired: 'никто не принял' }[c.status];
+  const invite = c.status === 'open' && c.creator ? `
+    <div class="card">
+      <p class="eyebrow">Отправьте приглашение другу</p>
+      <p class="swap-note" style="margin:0 0 12px;">Он нажмёт на ссылку в Telegram и станет вашим соперником. Ссылка на одного человека и живёт месяц.</p>
+      <div class="row-2">
+        <button class="btn btn-primary" onclick="shareInvite()">Отправить в Telegram</button>
+        <button class="btn btn-outline" onclick="copyInvite()">Скопировать</button>
+      </div>
+      <p class="swap-note" style="margin:12px 0 0;">Или назовите код: <b>${c.code}</b></p>
+    </div>
+  ` : '';
+  const winner = challenge.winner ? `
+    <div class="card ch-winner">
+      ${icon('trophy')}
+      <p>${challenge.winner.id ? (challenge.winner.me ? 'Вы победили!' : 'Победил ' + escapeHtml(challenge.winner.name)) : challenge.winner.reason === 'tie' ? 'Ничья' : 'Победителя нет'}</p>
+    </div>
+  ` : '';
+  const table = challenge.players.length > 1 ? `
+    <div class="card">
+      ${challenge.standings.map(s => `
+        <div class="ch-row">
+          <span class="ch-name">${s.me ? 'Вы' : escapeHtml(s.name)}${s.pending ? `<small>на проверке: ${s.pending}</small>` : ''}</span>
+          <span class="ch-best">${s.best == null ? '<i>нет результата</i>' : valueText(s.best, c.unit)}</span>
+        </div>
+      `).join('')}
+    </div>
+  ` : '';
+  const form = canAttempt ? `
+    <div class="card">
+      <p class="eyebrow">Новая попытка · ${c.unit}</p>
+      <div class="weight-form">
+        <input type="text" inputmode="decimal" placeholder="Результат" maxlength="8" value="${escapeHtml(attemptValue)}" oninput="attemptValue = this.value"
+          onkeydown="if (event.key === 'Enter') submitAttempt()">
+        <button class="btn btn-primary" onclick="submitAttempt()" ${competeBusy ? 'disabled' : ''}>Записать</button>
+      </div>
+      <p class="swap-note" style="margin:10px 0 0;">После записи получите код для видео. Без видео и проверки результат не считается.</p>
+    </div>
+  ` : '';
+  const attempts = challenge.attempts.slice().reverse();
+  const cancelable = c.status === 'open' || c.status === 'active';
+  return `
+    ${back}
+    <div class="card">
+      <p class="eyebrow">${c.dir === 'min' ? 'Кто быстрее' : 'Кто больше'} · ${c.unit} · ${endText(c.end)}</p>
+      <p class="quiz-title" style="margin:0 0 6px;">${escapeHtml(c.title)}</p>
+      <span class="ch-pill ${c.status === 'active' ? 'wait' : 'idle'}">${statusText}</span>
+      ${other ? `<p class="swap-note" style="margin:10px 0 0;">Соперник: ${escapeHtml(other.name)}</p>` : ''}
+    </div>
+    ${competeNote ? `<div class="card"><p class="swap-note" style="margin:0;">${escapeHtml(competeNote)}</p></div>` : ''}
+    ${winner}${invite}${table}${form}
+    ${attempts.length ? `<p class="section-title">Попытки</p>` + attempts.map(a => `<div class="card">${attemptHtml(a, c)}</div>`).join('') : ''}
+    ${cancelable ? `<div class="settings-link"><button class="btn-ghost" onclick="cancelChallenge()">${armed === 'cancel' ? 'Точно? Нажмите ещё раз' : c.status === 'open' ? 'Отменить вызов' : 'Выйти из вызова'}</button></div>` : ''}
+  `;
 }
 const MEASURES = [['waist', 'Талия'], ['chest', 'Грудь'], ['hips', 'Бёдра'], ['arm', 'Плечо'], ['thigh', 'Бедро']];
 // Пустые поля не трогают уже записанное в этот день: можно замерить талию утром,
@@ -4607,10 +5108,20 @@ function pastMonths(){
 }
 
 function renderHeader(){
+  // Кружок «Вызов» справа от заголовка: вкладки внизу остаются на месте.
+  const show = session && !['login', 'quiz', 'loading', 'error'].includes(view);
+  const on = view === 'compete' || view === 'challenge' || view === 'challenge-new';
   return `
     <header>
-      <h1>Дневник тренировок</h1>
-      <div class="date">${formatDateRu(todayStr())}</div>
+      <div>
+        <h1>Дневник тренировок</h1>
+        <div class="date">${formatDateRu(todayStr())}</div>
+      </div>
+      ${show ? `
+        <button class="challenge-btn${on ? ' on' : ''}" onclick="openCompete()" aria-label="Вызовы">
+          ${icon('trophy')}<span>Вызов</span>${competeBadge ? `<b class="badge">${competeBadge > 9 ? '9+' : competeBadge}</b>` : ''}
+        </button>
+      ` : ''}
     </header>
   `;
 }
@@ -5782,6 +6293,9 @@ function render(){
   else if (view === 'settings') body = renderSettings();
   else if (view === 'history') body = renderHistory();
   else if (view === 'progress') body = renderProgress();
+  else if (view === 'compete') body = renderCompete();
+  else if (view === 'challenge') body = renderChallenge();
+  else if (view === 'challenge-new') body = renderChallengeNew();
   else if (view === 'quiz') body = renderQuiz();
   else if (view === 'login') body = renderLogin();
   else if (view === 'error') body = renderLoadError();
@@ -5862,13 +6376,30 @@ async function init(){
   render();
   // Бот открывает дневник сразу на «Прогрессе» — фото подгружаем и там.
   if (view === 'progress') loadPhotos();
+  // Кнопки бота ведут в вызовы, а приглашение — прямо в нужный вызов.
+  if (view === 'compete'){
+    const params = new URLSearchParams(location.search);
+    const wanted = params.get('c');
+    params.delete('tab');
+    params.delete('c');
+    try { history.replaceState(null, '', location.pathname + (params.toString() ? '?' + params : '') + location.hash); } catch (e) {}
+    if (/^[a-f0-9]{8}$/.test(wanted || '')) openChallenge(wanted);
+    else loadChallenges();
+  } else {
+    refreshBadge();
+  }
 }
 
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'hidden' && activeType) saveAll();
   if (document.visibilityState === 'visible' && pendingSave) saveAll();
-  // Вернулись из чата с ботом, где могли прислать снимок.
+  // Вернулись из чата с ботом, где могли прислать снимок или видео для вызова.
   if (document.visibilityState === 'visible' && view === 'progress' && session) loadPhotos();
+  if (document.visibilityState === 'visible' && session){
+    if (view === 'challenge' && challengeId) reloadChallenge();
+    else if (view === 'compete') loadChallenges();
+    else refreshBadge();
+  }
 });
 window.addEventListener('online', () => {
   if (pendingSave) saveAll();

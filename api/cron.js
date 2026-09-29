@@ -1,6 +1,7 @@
 const { kvCommand } = require('./_lib');
 const { siteUrl, botRequest } = require('./_auth');
 const { summarize, summaryText, shiftMonth } = require('./_summary');
+const compete = require('./_compete');
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const LATE_LIMIT_MINUTES = 120;
@@ -200,7 +201,11 @@ module.exports = async (req, res) => {
       }
     }
 
-    res.status(200).json({ checked: ids.length, sent, weight: weightSent, monthly: monthlyCount });
+    // Сроки вызовов, напоминания и итоги — отдельным шагом, чтобы сбой тут не ломал напоминания выше.
+    let challenges = null;
+    try { challenges = await compete.sweep(site); } catch (e) { console.error('Challenge sweep failed', e.message); }
+
+    res.status(200).json({ checked: ids.length, sent, weight: weightSent, monthly: monthlyCount, challenges });
   } catch (e) {
     res.status(500).json({ error: String(e && e.message || e) });
   }

@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const { kvCommand, kvGet, kvSet } = require('./_lib');
-const { siteUrl, safeEqual, webhookSecret } = require('./_auth');
+const { siteUrl, safeEqual, webhookSecret, botRequest } = require('./_auth');
+const compete = require('./_compete');
 
 function userValue(user) {
   return JSON.stringify({
@@ -47,11 +48,69 @@ async function keepPhoto(user, msg){
   await kvSet(key, JSON.stringify(list.slice(-MAX_PHOTOS)));
 }
 
+// Открыть один раз после выкладки (или после смены токена бота): направляет бота на этот сайт.
+// Раньше это был отдельный адрес /api/setup, теперь он перенаправляется сюда: у Vercel
+// на бесплатном тарифе не больше двенадцати функций, и отдельная под это не нужна.
+async function setup(req, res) {
+  const site = siteUrl(req);
+  await botRequest('setWebhook', {
+    url: site + '/api/bot',
+    secret_token: webhookSecret(),
+    allowed_updates: ['message', 'callback_query']
+  });
+  await botRequest('setChatMenuButton', {
+    menu_button: { type: 'web_app', text: 'Дневник', web_app: { url: site } }
+  });
+  await botRequest('setMyCommands', {
+    commands: [{ command: 'start', description: 'Открыть дневник и получить код для входа' }]
+  });
+  await botRequest('setMyDescription', {
+    description: 'Дневник тренировок: подберёт программу по короткому тесту, подскажет веса с учётом прогрессии и сохранит историю. Нажмите «Старт».'
+  });
+  const me = await botRequest('getMe');
+  res.status(200).json({ ok: true, bot: '@' + me.username, site });
+}
+
+// Нажатия кнопок под видео: засчитать, отклонить, пожаловаться, решения владельца.
+async function handleCallback(cb, site) {
+  const uid = String(cb.from.id);
+  const [act, compId, attId] = String(cb.data || '').split(':');
+  let result = { toast: '' };
+  if (act === 'ok' || act === 'no') result = await compete.decide(uid, compId, attId, act, site);
+  else if (act === 'rp') result = await compete.report(uid, compId, attId, site);
+  else if (act === 'ao' || act === 'ad' || act === 'ab') result = await compete.ownerAction(uid, act, compId, attId, site);
+  try {
+    await botRequest('answerCallbackQuery', {
+      callback_query_id: cb.id,
+      text: result.error ? result.error : (result.toast || ''),
+      show_alert: !!result.error
+    });
+    // Кнопки после ответа заменяем итогом, чтобы нельзя было нажать дважды.
+    if (!result.error && result.label && cb.message) {
+      await botRequest('editMessageReplyMarkup', {
+        chat_id: cb.message.chat.id,
+        message_id: cb.message.message_id,
+        reply_markup: { inline_keyboard: [[{ text: result.label, callback_data: 'noop' }]] }
+      });
+    }
+  } catch (e) { console.error('callback answer failed', e.message); }
+}
+
 // Telegram webhook: any private message gets the Mini App button and a one-time code for the website.
 module.exports = async (req, res) => {
   try {
+    if (req.method === 'GET' && new URL(req.url, 'http://localhost').searchParams.get('setup')) {
+      await setup(req, res);
+      return;
+    }
     if (req.method !== 'POST' || !safeEqual(req.headers['x-telegram-bot-api-secret-token'] || '', webhookSecret())) {
       res.status(401).end();
+      return;
+    }
+    const site = siteUrl(req);
+    if (req.body && req.body.callback_query && req.body.callback_query.from) {
+      await handleCallback(req.body.callback_query, site);
+      res.status(200).end();
       return;
     }
     const msg = req.body && req.body.message;
@@ -59,7 +118,35 @@ module.exports = async (req, res) => {
       res.status(200).end();
       return;
     }
-    const site = siteUrl(req);
+    const reply = (text, extra) => res.status(200).json({ method: 'sendMessage', chat_id: msg.chat.id, parse_mode: 'HTML', text, ...(extra || {}) });
+
+    // Ссылка-приглашение в вызов: t.me/бот?start=join_<код>.
+    const invite = /^\/start(?:@\w+)?\s+join_([a-f0-9]{10})\s*$/.exec(msg.text || '');
+    if (invite) {
+      const hint = [msg.from.first_name, msg.from.last_name].filter(Boolean).join(' ') || msg.from.username || '';
+      const joined = await compete.join(String(msg.from.id), invite[1], hint, site);
+      if (joined.error) {
+        reply(joined.error);
+        return;
+      }
+      reply(`Вы приняли вызов «${joined.title.replace(/[&<>]/g, '')}». Записывайте результат в дневнике и присылайте видео: без него он не считается.`, {
+        reply_markup: { inline_keyboard: [[{ text: 'Открыть вызов', web_app: { url: site + '?tab=compete&c=' + joined.comp } }]] }
+      });
+      return;
+    }
+
+    // Видео или «кружок» — подтверждение попытки в вызове.
+    if (msg.video || msg.video_note) {
+      const done = await compete.attachTelegramVideo(String(msg.from.id), msg, site);
+      if (done.error) {
+        reply(done.error);
+        return;
+      }
+      reply(`Видео получено ✅ Теперь его проверит ${String(done.opponent).replace(/[&<>]/g, '')}: как только ответит, я напишу.`, {
+        reply_markup: { inline_keyboard: [[{ text: 'Открыть вызов', web_app: { url: site + '?tab=compete&c=' + done.comp.id } }]] }
+      });
+      return;
+    }
 
     // Фото — это снимок для дневника, а не просьба о входе.
     if (Array.isArray(msg.photo) && msg.photo.length) {
