@@ -1,5 +1,5 @@
 const crypto = require('crypto');
-const { kvCommand } = require('./_lib');
+const { kvCommand, kvGet, kvSet } = require('./_lib');
 const { siteUrl, safeEqual, webhookSecret } = require('./_auth');
 
 function userValue(user) {
@@ -30,6 +30,23 @@ async function issueLink(user) {
   return token;
 }
 
+const MAX_PHOTOS = 60;
+
+// Снимок, присланный боту, становится фото прогресса: запоминаем его номер
+// в Telegram. Сам файл остаётся в переписке, у нас только ссылка на него.
+async function keepPhoto(user, msg){
+  const sizes = msg.photo;
+  const best = sizes[sizes.length - 1];
+  const key = 'training-log:photos:' + user.id;
+  let list = [];
+  try { list = JSON.parse(await kvGet(key) || '[]'); } catch (e) { list = []; }
+  if (!Array.isArray(list)) list = [];
+  if (!list.some(p => p.id === best.file_unique_id)) {
+    list.push({ id: best.file_unique_id, file: best.file_id, at: (msg.date || Math.floor(Date.now() / 1000)) * 1000 });
+  }
+  await kvSet(key, JSON.stringify(list.slice(-MAX_PHOTOS)));
+}
+
 // Telegram webhook: any private message gets the Mini App button and a one-time code for the website.
 module.exports = async (req, res) => {
   try {
@@ -43,6 +60,33 @@ module.exports = async (req, res) => {
       return;
     }
     const site = siteUrl(req);
+
+    // Фото — это снимок для дневника, а не просьба о входе.
+    if (Array.isArray(msg.photo) && msg.photo.length) {
+      await keepPhoto(msg.from, msg);
+      // Альбом приходит несколькими сообщениями: отвечаем на него один раз.
+      const first = await kvCommand(['SET', 'training-log:photo-ack:' + msg.from.id, '1', 'EX', 20, 'NX']);
+      if (first !== 'OK') {
+        res.status(200).end();
+        return;
+      }
+      res.status(200).json({
+        method: 'sendMessage',
+        chat_id: msg.chat.id,
+        text: 'Фото добавлено в дневник ✅\n\nОно появится на вкладке «Прогресс». Снимок остаётся в этой переписке — в дневнике хранится только ссылка на него.',
+        reply_markup: { inline_keyboard: [[{ text: 'Открыть фото', web_app: { url: site + '?tab=progress' } }]] }
+      });
+      return;
+    }
+    if (msg.document && /^image\//.test(msg.document.mime_type || '')) {
+      res.status(200).json({
+        method: 'sendMessage',
+        chat_id: msg.chat.id,
+        text: 'Пришлите снимок как обычное фото, а не файлом: так Telegram его сожмёт, и он откроется в дневнике.'
+      });
+      return;
+    }
+
     const [code, token] = await Promise.all([issueCode(msg.from), issueLink(msg.from)]);
     res.status(200).json({
       method: 'sendMessage',

@@ -703,6 +703,47 @@
   .text-input::placeholder{color:var(--text-faint);}
   .field-label{font-size:13px; color:var(--text-muted); margin:16px 0 8px;}
   /* Нагрузка по мышцам: один ряд — одна группа, число стоит рядом со шкалой. */
+  .photo-grid{display:grid; grid-template-columns:repeat(3, 1fr); gap:6px;}
+  .photo-pair{display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:10px;}
+  .photo-cap{margin:6px 0 0; text-align:center; font-size:12px; color:var(--text-muted);}
+  .photo-cell{
+    position:relative;
+    display:block;
+    width:100%;
+    aspect-ratio:3/4;
+    padding:0;
+    border:none;
+    border-radius:12px;
+    overflow:hidden;
+    background:var(--surface-2);
+    cursor:pointer;
+  }
+  .photo-cell img{width:100%; height:100%; object-fit:cover; display:block;}
+  .photo-cell img.broken{visibility:hidden;}
+  .photo-cell span{
+    position:absolute;
+    left:0; right:0; bottom:0;
+    padding:16px 6px 5px;
+    font-size:11px;
+    font-weight:600;
+    color:#fff;
+    text-align:left;
+    background:linear-gradient(to top, rgba(0,0,0,0.55), transparent);
+  }
+  .photo-view{
+    position:fixed;
+    inset:0;
+    z-index:60;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    gap:14px;
+    padding:16px;
+    background:rgba(0,0,0,0.93);
+  }
+  .photo-view img{max-width:100%; max-height:76vh; border-radius:14px; object-fit:contain;}
+  .photo-bar{display:flex; align-items:center; gap:18px; color:#fff; font-size:14px;}
   .measure-form{display:grid; grid-template-columns:1fr 1fr; gap:10px 12px;}
   .measure-field{display:flex; flex-direction:column; gap:4px; font-size:13px; color:var(--text-muted);}
   .measure-field input{
@@ -1709,6 +1750,11 @@ let weights = [];          // история веса: [{ date, kg }]
 let measures = [];         // замеры тела в сантиметрах: [{ date, waist, chest, hips, arm, thigh }]
 let measureType = 'waist'; // чей график показан
 let measureError = '';
+let photos = [];           // фото прогресса: [{ id, at }] — сами снимки лежат в Telegram
+let photosState = '';      // '', 'loading', 'ok', 'error'
+const photoBlobs = {};     // номер фото -> адрес готовой картинки в памяти
+let photoOpen = null;      // фото, открытое на весь экран
+let photoArmed = null;     // удаление ждёт подтверждения
 let weightError = '';
 let restCfg = null;        // настройки таймера отдыха
 let rest = null;           // идущий отсчёт: { endsAt, name, done }
@@ -2414,6 +2460,80 @@ function logWeight(){
   render();
   saveAll();
 }
+// Фото приходят из бота: человек присылает снимок в чат, а сюда попадает ссылка на него.
+async function loadPhotos(){
+  if (!session) return;
+  if (!photos.length) photosState = 'loading';
+  if (view === 'progress') render();
+  try {
+    const res = await fetch('/api/photos', { headers: apiHeaders() });
+    if (!res.ok) throw new Error('bad status ' + res.status);
+    const data = await res.json();
+    photos = (Array.isArray(data.photos) ? data.photos : []).slice().sort((a, b) => a.at - b.at);
+    photosState = 'ok';
+  } catch (e) {
+    photosState = 'error';
+  }
+  if (!botName){
+    try { botName = (await fetch('/api/auth').then(r => r.json())).bot || ''; } catch (e) {}
+  }
+  if (view === 'progress') render();
+}
+// Снимок просит авторизацию, поэтому обычной ссылкой в картинке его не показать:
+// скачиваем и держим готовую картинку в памяти.
+async function fetchPhoto(id){
+  if (photoBlobs[id]) return photoBlobs[id];
+  const res = await fetch('/api/photos?id=' + encodeURIComponent(id), { headers: apiHeaders() });
+  if (!res.ok) throw new Error('bad status ' + res.status);
+  photoBlobs[id] = URL.createObjectURL(await res.blob());
+  return photoBlobs[id];
+}
+function hydratePhotos(){
+  document.querySelectorAll('img[data-photo]').forEach(img => {
+    const id = img.getAttribute('data-photo');
+    if (photoBlobs[id]){ img.src = photoBlobs[id]; return; }
+    fetchPhoto(id).then(url => { img.src = url; }).catch(() => img.classList.add('broken'));
+  });
+}
+function openPhoto(id){
+  photoOpen = id;
+  photoArmed = null;
+  render();
+}
+function closePhoto(){
+  photoOpen = null;
+  photoArmed = null;
+  render();
+}
+async function deletePhoto(id){
+  if (photoArmed !== id){
+    photoArmed = id;
+    render();
+    setTimeout(() => { if (photoArmed === id){ photoArmed = null; if (view === 'progress') render(); } }, 4000);
+    return;
+  }
+  photoArmed = null;
+  try {
+    const res = await fetch('/api/photos?id=' + encodeURIComponent(id), { method: 'DELETE', headers: apiHeaders() });
+    if (!res.ok) throw new Error('bad status ' + res.status);
+    photos = photos.filter(p => p.id !== id);
+    if (photoBlobs[id]){ URL.revokeObjectURL(photoBlobs[id]); delete photoBlobs[id]; }
+    photoOpen = null;
+  } catch (e) {
+    photosState = 'error';
+  }
+  render();
+}
+function openBotChat(){
+  if (!botName) return;
+  const url = 'https://t.me/' + botName;
+  const tg = window.Telegram && window.Telegram.WebApp;
+  if (tg && tg.openTelegramLink && TG_INIT_DATA) tg.openTelegramLink(url);
+  else window.open(url, '_blank', 'noopener');
+}
+function photoDate(at, short){
+  return dayText(todayStr(new Date(at)), short);
+}
 const MEASURES = [['waist', 'Талия'], ['chest', 'Грудь'], ['hips', 'Бёдра'], ['arm', 'Плечо'], ['thigh', 'Бедро']];
 // Пустые поля не трогают уже записанное в этот день: можно замерить талию утром,
 // а бёдра вечером.
@@ -3102,6 +3222,10 @@ function logout(){
   overrides = {};
   profile = null;
   program = DEFAULT_PROGRAM;
+  photos = [];
+  photosState = '';
+  photoOpen = null;
+  Object.keys(photoBlobs).forEach(id => { URL.revokeObjectURL(photoBlobs[id]); delete photoBlobs[id]; });
   loginError = '';
   showLogin();
 }
@@ -4181,6 +4305,7 @@ function switchTab(v){
   weightError = '';
   render();
   if (v === 'settings' && !statsChecked) loadStats();
+  if (v === 'progress') loadPhotos();
 }
 async function resetAll(){
   if (!resetArmed){
@@ -5177,13 +5302,56 @@ function renderProgress(){
     </div>
     <p class="lib-note">Мерьте раз в две-три недели, утром и в одном и том же месте: талию — на уровне пупка, грудь — по самой выпуклой части, бёдра — по самой широкой, плечо — по середине напряжённого бицепса, бедро — на середине. Достаточно вписать те, что измерили.</p>
   `;
+  const photoCell = p => `
+    <button class="photo-cell" onclick="openPhoto('${p.id}')">
+      <img data-photo="${p.id}" alt="" ${photoBlobs[p.id] ? 'src="' + photoBlobs[p.id] + '"' : ''}>
+      <span>${photoDate(p.at, true)}</span>
+    </button>
+  `;
+  const firstPhoto = photos[0];
+  const lastPhoto = photos[photos.length - 1];
+  const photoCard = `
+    <p class="section-title">Фото прогресса</p>
+    <div class="card">
+      ${photos.length > 1 ? `
+        <div class="photo-pair">
+          <div>${photoCell(firstPhoto)}<p class="photo-cap">Первое</p></div>
+          <div>${photoCell(lastPhoto)}<p class="photo-cap">Последнее</p></div>
+        </div>
+        <p class="swap-note" style="margin:0 0 14px; text-align:center;">Между снимками ${Math.round((lastPhoto.at - firstPhoto.at) / 86400000)} ${plural(Math.round((lastPhoto.at - firstPhoto.at) / 86400000), ['день', 'дня', 'дней'])}</p>
+      ` : ''}
+      ${photos.length ? `
+        <div class="photo-grid">${[...photos].reverse().map(photoCell).join('')}</div>
+      ` : photosState === 'error' ? '<p class="empty" style="margin:0 0 12px;">Не удалось загрузить фото — нужна связь.</p>'
+        : photosState === 'loading' ? '<p class="empty" style="margin:0 0 12px;">Загрузка…</p>'
+        : '<p class="empty" style="margin:0 0 12px;">Фото пока нет</p>'}
+      <p class="swap-note" style="margin:12px 0 12px;">Чтобы добавить, отправьте снимок боту в чат как обычное фото — он появится здесь.</p>
+      <div class="row-2">
+        ${botName ? `<button class="btn btn-outline" onclick="openBotChat()">Открыть чат</button>` : ''}
+        <button class="btn btn-outline" onclick="loadPhotos()">Обновить</button>
+      </div>
+    </div>
+    <p class="lib-note">Снимки хранятся в самом Telegram, в дневнике — только ссылка на них. Удаление из дневника не стирает снимок из переписки с ботом: его можно убрать там вручную.</p>
+  `;
+  const photoViewer = photoOpen ? `
+    <div class="photo-view" onclick="closePhoto()">
+      <img data-photo="${photoOpen}" alt="" ${photoBlobs[photoOpen] ? 'src="' + photoBlobs[photoOpen] + '"' : ''}>
+      <div class="photo-bar" onclick="event.stopPropagation()">
+        <span>${photoDate((photos.find(p => p.id === photoOpen) || { at: Date.now() }).at)}</span>
+        <button class="btn-ghost" style="color:#FF6B6B" onclick="deletePhoto('${photoOpen}')">${photoArmed === photoOpen ? 'Точно убрать?' : 'Убрать из дневника'}</button>
+        <button class="btn-ghost" style="color:#fff" onclick="closePhoto()">Закрыть</button>
+      </div>
+    </div>
+  ` : '';
   return `
     ${monthCard()}
     ${weightCard}
     ${measureCard}
+    ${photoCard}
     ${volumeCard}
     ${groupCard}
     ${recoveryCard}
+    ${photoViewer}
     <p class="section-title">Упражнения</p>
     <div class="card list">${rows}</div>
     <p class="lib-note">Нажмите на упражнение — покажу, как менялся рабочий вес.</p>
@@ -5382,6 +5550,7 @@ function render(){
   app.innerHTML = renderHeader() + (bare ? '' : renderTabBar(activeTab)) + banner + body + restBar;
   document.body.classList.toggle('resting', !!rest);
   document.querySelectorAll('.autogrow').forEach(autoGrow);
+  if (view === 'progress') hydratePhotos();
 }
 
 async function init(){
@@ -5436,11 +5605,15 @@ async function init(){
   applyData(data);
   writeCache(false);
   render();
+  // Бот открывает дневник сразу на «Прогрессе» — фото подгружаем и там.
+  if (view === 'progress') loadPhotos();
 }
 
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'hidden' && activeType) saveAll();
   if (document.visibilityState === 'visible' && pendingSave) saveAll();
+  // Вернулись из чата с ботом, где могли прислать снимок.
+  if (document.visibilityState === 'visible' && view === 'progress' && session) loadPhotos();
 });
 window.addEventListener('online', () => {
   if (pendingSave) saveAll();
