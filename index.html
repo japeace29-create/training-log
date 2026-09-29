@@ -210,6 +210,8 @@
     border-bottom:0.5px solid var(--separator);
   }
   .list > :not(.row):last-child{border-bottom:none;}
+  /* Подпись над рядом кнопок — часть того же блока, разделителя под ней не нужно. */
+  .list > .field-label{border-bottom:none; padding-right:0;}
   .section-title{
     font-size:13px;
     color:var(--text-muted);
@@ -2529,7 +2531,22 @@ function toggleExerciseChart(name){
   render();
 }
 const REST_CHOICES = [60, 90, 120, 180];
-const DEFAULT_REST = () => ({ enabled: true, seconds: 90, notify: true });
+// Тяжёлые многосуставные подходы (присед, жим, тяга) восстанавливаются дольше
+// лёгких, поэтому у них может быть своё время. У тех, кто настраивал отдых
+// раньше, оно не задано — и ничего не меняется, пока человек сам не выберет.
+const MAIN_REST_CHOICES = [120, 150, 180, 240];
+const DEFAULT_REST = () => ({ enabled: true, seconds: 90, notify: true, mainSeconds: 150 });
+let roleIndex = null;
+function roleOf(name){
+  if (!roleIndex){
+    roleIndex = {};
+    Object.values(SLOTS).forEach(day => day.forEach(slot => slot.variants.forEach(v => { roleIndex[v.name] = v.role; })));
+  }
+  return roleIndex[name] || 'iso';
+}
+function restSecondsFor(name){
+  return roleOf(name) === 'main' && restCfg.mainSeconds ? restCfg.mainSeconds : restCfg.seconds;
+}
 function restLeft(){
   return rest ? Math.max(0, Math.round((rest.endsAt - Date.now()) / 1000)) : 0;
 }
@@ -2540,10 +2557,11 @@ function restClock(sec){
 function startRest(name){
   if (!restCfg || !restCfg.enabled) return;
   dropRestJob();
-  rest = { endsAt: Date.now() + restCfg.seconds * 1000, name: name || '', done: false, job: null, scheduled: false };
+  const seconds = restSecondsFor(name);
+  rest = { endsAt: Date.now() + seconds * 1000, name: name || '', done: false, job: null, scheduled: false };
   clearInterval(restTicker);
   restTicker = setInterval(tickRest, 500);
-  if (restCfg.notify) orderRest(rest, name, restCfg.seconds);
+  if (restCfg.notify) orderRest(rest, name, seconds);
 }
 // Просим сервер написать, когда отдых кончится. Тогда сообщение придёт,
 // даже если приложение свернули: телефон в этот момент может спать.
@@ -2642,6 +2660,12 @@ function toggleRest(){
 }
 function setRestSeconds(seconds){
   restCfg.seconds = seconds;
+  render();
+  saveAll();
+}
+// 0 — базовые упражнения отдыхают так же, как остальные.
+function setMainRest(seconds){
+  restCfg.mainSeconds = seconds || null;
   render();
   saveAll();
 }
@@ -4250,9 +4274,17 @@ function renderSettings(){
         </span>
       </button>
       ${restOn ? `
-        <div class="days">
+        <p class="field-label" style="margin:14px 16px 0;">Обычные упражнения</p>
+        <div class="days" style="padding-top:8px;">
           ${REST_CHOICES.map(sec => `
             <button class="${restCfg.seconds === sec ? 'on' : ''}" onclick="setRestSeconds(${sec})">${sec} с</button>
+          `).join('')}
+        </div>
+        <p class="field-label" style="margin:2px 16px 0;">Базовые: присед, жим, тяга</p>
+        <div class="days" style="padding-top:8px;">
+          <button class="${!restCfg.mainSeconds ? 'on' : ''}" onclick="setMainRest(0)">Так же</button>
+          ${MAIN_REST_CHOICES.map(sec => `
+            <button class="${restCfg.mainSeconds === sec ? 'on' : ''}" onclick="setMainRest(${sec})">${sec} с</button>
           `).join('')}
         </div>
         <button class="row" onclick="toggleRestNotify()">
@@ -4265,7 +4297,7 @@ function renderSettings(){
       ` : ''}
     </div>
     <p class="lib-note">${restOn
-      ? 'Отсчёт начинается сам, когда отмечаете подход выполненным, — кроме последнего в упражнении: до следующего снаряда ещё дойти, это и есть пауза. Кнопка «Пропустить» обрывает отсчёт.'
+      ? 'Отсчёт начинается сам, когда отмечаете подход выполненным, — кроме последнего в упражнении: до следующего снаряда ещё дойти, это и есть пауза. Тяжёлым базовым упражнениям полезно отдыхать дольше: 2–3 минуты, лёгким хватает минуты-полутора. Кнопка «Пропустить» обрывает отсчёт.'
       : 'Отсчёт между подходами не показывается.'}</p>
   `;
   const customForm = !customOpen || !customDraft ? '' : `

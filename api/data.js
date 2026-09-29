@@ -29,7 +29,9 @@ function rest(r){
   if (!r || typeof r !== 'object') return null;
   const seconds = Math.round(Number(r.seconds) / 15) * 15;
   if (!(seconds >= 30 && seconds <= 600)) return null;
-  return { enabled: !!r.enabled, seconds, notify: !!r.notify };
+  // Время для базовых упражнений необязательно: пусто — отдых как у остальных.
+  const main = r.mainSeconds == null ? 0 : Math.round(Number(r.mainSeconds) / 15) * 15;
+  return { enabled: !!r.enabled, seconds, notify: !!r.notify, mainSeconds: main >= 30 && main <= 600 ? main : null };
 }
 
 // История веса: по одной записи на дату, не больше пятисот последних.
