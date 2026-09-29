@@ -1755,6 +1755,8 @@ let photosState = '';      // '', 'loading', 'ok', 'error'
 const photoBlobs = {};     // номер фото -> адрес готовой картинки в памяти
 let photoOpen = null;      // фото, открытое на весь экран
 let photoArmed = null;     // удаление ждёт подтверждения
+let shareBusy = null;      // дата тренировки, карточку которой сейчас отправляем
+let shareNote = null;      // { date, text } — что ответил сервер
 let weightError = '';
 let restCfg = null;        // настройки таймера отдыха
 let rest = null;           // идущий отсчёт: { endsAt, name, done }
@@ -3118,6 +3120,139 @@ async function stopBroadcast(){
   } catch (e) {
     broadcastNote = e.message;
   }
+  render();
+}
+// Итог тренировки одной картинкой: её присылает бот, а дальше её можно переслать
+// кому угодно — обычным сообщением. Рисуем на телефоне, без сервера.
+function workoutCard(session){
+  const W = 1080, H = 1350;
+  const canvas = document.createElement('canvas');
+  canvas.width = W;
+  canvas.height = H;
+  const g = canvas.getContext('2d');
+  const font = size => size + 'px -apple-system, "SF Pro Display", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
+
+  const bg = g.createLinearGradient(0, 0, W, H);
+  bg.addColorStop(0, '#0B0B10');
+  bg.addColorStop(1, '#17171F');
+  g.fillStyle = bg;
+  g.fillRect(0, 0, W, H);
+  const glow = (x, y, r, color) => {
+    const grad = g.createRadialGradient(x, y, 0, x, y, r);
+    grad.addColorStop(0, color);
+    grad.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = grad;
+    g.fillRect(0, 0, W, H);
+  };
+  glow(140, 120, 620, 'rgba(255,58,110,0.28)');
+  glow(980, 260, 560, 'rgba(40,110,255,0.30)');
+  glow(700, 1300, 640, 'rgba(0,200,165,0.20)');
+
+  const rows = session.exercises.map(ex => {
+    const sets = filledSets(ex);
+    if (!sets.length) return null;
+    const top = sets.reduce((a, b) => setScore(ex.isTime, b) > setScore(ex.isTime, a) ? b : a);
+    const before = exerciseRecord(ex.name, session.date);
+    return { name: ex.name, label: setLabel(ex.isTime, top), record: !!before && setScore(ex.isTime, top) > before.score };
+  }).filter(Boolean);
+  const sets = session.exercises.reduce((n, ex) => n + filledSets(ex).length, 0);
+  const records = rows.filter(r => r.record).length;
+  const volume = sessionVolume(session);
+
+  g.textBaseline = 'alphabetic';
+  g.fillStyle = 'rgba(255,255,255,0.55)';
+  g.font = '600 26px -apple-system, "Segoe UI", Roboto, Arial, sans-serif';
+  g.letterSpacing = '4px';
+  g.fillText('ДНЕВНИК ТРЕНИРОВОК', 72, 96);
+  g.letterSpacing = '0px';
+
+  g.fillStyle = '#fff';
+  g.font = '700 ' + font(96);
+  g.fillText('Тренировка ' + session.type, 72, 210);
+  g.fillStyle = 'rgba(255,255,255,0.7)';
+  g.font = font(38);
+  g.fillText(formatDateRu(session.date) + (session.deload ? ' · разгрузка' : ''), 72, 268);
+
+  // Четыре показателя: что важнее всего в конце тренировки.
+  const tiles = [
+    [String(sets), 'подходов'],
+    [volume >= 1000 ? kgText(volume / 1000) + ' т' : volume + ' кг', 'поднято'],
+    [session.minutes ? minutesText(session.minutes) : '—', 'время'],
+    [String(records), records === 1 ? 'рекорд' : 'рекордов']
+  ];
+  const tileW = (W - 72 * 2 - 24 * 3) / 4;
+  tiles.forEach(([value, label], i) => {
+    const x = 72 + i * (tileW + 24);
+    g.fillStyle = 'rgba(255,255,255,0.08)';
+    // Скруглённый прямоугольник вручную: roundRect есть не во всех встроенных браузерах.
+    const r = 28, y0 = 320, h = 150;
+    g.beginPath();
+    g.moveTo(x + r, y0);
+    g.arcTo(x + tileW, y0, x + tileW, y0 + h, r);
+    g.arcTo(x + tileW, y0 + h, x, y0 + h, r);
+    g.arcTo(x, y0 + h, x, y0, r);
+    g.arcTo(x, y0, x + tileW, y0, r);
+    g.closePath();
+    g.fill();
+    g.fillStyle = '#fff';
+    g.font = '700 ' + font(value.length > 5 ? 40 : 52);
+    g.fillText(value, x + 24, 396);
+    g.fillStyle = 'rgba(255,255,255,0.6)';
+    g.font = font(26);
+    g.fillText(label, x + 24, 444);
+  });
+
+  const shown = rows.slice(0, 9);
+  const step = Math.min(78, Math.floor(760 / Math.max(shown.length, 1)));
+  shown.forEach((r, i) => {
+    const y = 560 + i * step;
+    g.strokeStyle = 'rgba(255,255,255,0.10)';
+    g.lineWidth = 2;
+    g.beginPath();
+    g.moveTo(72, y + 22);
+    g.lineTo(W - 72, y + 22);
+    g.stroke();
+    g.font = font(36);
+    g.textAlign = 'right';
+    g.fillStyle = r.record ? '#FFD60A' : '#fff';
+    g.font = '600 ' + font(36);
+    const label = (r.record ? '★ ' : '') + r.label;
+    g.fillText(label, W - 72, y + 8);
+    const room = W - 72 * 2 - g.measureText(label).width - 40;
+    g.textAlign = 'left';
+    g.fillStyle = 'rgba(255,255,255,0.92)';
+    g.font = font(36);
+    let name = r.name;
+    while (g.measureText(name).width > room && name.length > 4) name = name.slice(0, -2);
+    g.fillText(name === r.name ? name : name.trimEnd() + '…', 72, y + 8);
+  });
+  if (rows.length > shown.length){
+    g.fillStyle = 'rgba(255,255,255,0.55)';
+    g.font = font(30);
+    g.fillText('и ещё ' + (rows.length - shown.length) + ' ' + plural(rows.length - shown.length, ['упражнение', 'упражнения', 'упражнений']), 72, 560 + shown.length * step + 20);
+  }
+  return canvas;
+}
+async function shareWorkout(date){
+  const session = sessions.find(s => s.date === date);
+  if (!session || shareBusy) return;
+  shareBusy = date;
+  shareNote = null;
+  render();
+  try {
+    const image = workoutCard(session).toDataURL('image/jpeg', 0.88);
+    const res = await fetch('/api/export', {
+      method: 'POST',
+      headers: apiHeaders(),
+      body: JSON.stringify({ format: 'card', image, caption: 'Тренировка ' + session.type + ' · ' + formatDateRu(session.date) })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Ошибка сервера ' + res.status);
+    shareNote = { date, text: 'Карточка ждёт вас в чате с ботом — перешлите её кому хотите.' };
+  } catch (e) {
+    shareNote = { date, text: e.message };
+  }
+  shareBusy = null;
   render();
 }
 async function exportData(format){
@@ -5119,6 +5254,10 @@ function renderHistory(){
             <button class="btn btn-outline" onclick="editSession('${s.date}')">Изменить</button>
             <button class="btn btn-outline danger" onclick="deleteSession('${s.date}')">${deleteArmed === s.date ? 'Точно удалить?' : 'Удалить'}</button>
           </div>
+          <div class="hist-actions" style="margin-top:0;">
+            <button class="btn btn-outline" onclick="shareWorkout('${s.date}')" ${shareBusy ? 'disabled' : ''}>${shareBusy === s.date ? 'Рисую…' : 'Прислать карточкой в чат'}</button>
+          </div>
+          ${shareNote && shareNote.date === s.date ? `<p class="swap-note" style="margin:4px 0 0;">${escapeHtml(shareNote.text)}</p>` : ''}
         </div>
       </details>
     `;

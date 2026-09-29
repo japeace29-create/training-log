@@ -57,6 +57,21 @@ function toCsv(data){
   return '﻿' + rows.join('\r\n') + '\r\n';
 }
 
+// Карточка тренировки: картинку рисует приложение, а здесь она просто уходит в чат.
+async function sendPhoto(userId, bytes, caption){
+  const form = new FormData();
+  form.append('chat_id', String(userId));
+  if (caption) form.append('caption', caption);
+  form.append('photo', new Blob([bytes], { type: 'image/jpeg' }), 'workout.jpg');
+  const res = await fetch('https://api.telegram.org/bot' + botToken() + '/sendPhoto', {
+    method: 'POST',
+    body: form
+  });
+  const result = await res.json();
+  if (!result.ok) throw new Error('Telegram sendPhoto: ' + result.description);
+  return result.result;
+}
+
 async function sendDocument(userId, filename, text, mime, caption){
   const form = new FormData();
   form.append('chat_id', String(userId));
@@ -84,6 +99,27 @@ module.exports = async (req, res) => {
     }
     const key = 'training-log:data:' + userId;
     const body = req.body || {};
+
+    if (body.format === 'card') {
+      const base64 = String(body.image || '').replace(/^data:image\/jpeg;base64,/, '');
+      if (!/^[A-Za-z0-9+/=]+$/.test(base64)) {
+        res.status(400).json({ error: 'Картинка не разобралась' });
+        return;
+      }
+      const bytes = Buffer.from(base64, 'base64');
+      // JPEG начинается с FF D8; больше трёх мегабайт открытка быть не может.
+      if (bytes.length < 1000 || bytes[0] !== 0xFF || bytes[1] !== 0xD8) {
+        res.status(400).json({ error: 'Это не картинка' });
+        return;
+      }
+      if (bytes.length > 3 * 1024 * 1024) {
+        res.status(413).json({ error: 'Картинка слишком тяжёлая' });
+        return;
+      }
+      await sendPhoto(userId, bytes, String(body.caption || '').slice(0, 200));
+      res.status(200).json({ ok: true });
+      return;
+    }
 
     // Восстановление: файл проходит через ту же проверку, что и обычное сохранение.
     if (body.restore) {
