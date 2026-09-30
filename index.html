@@ -590,6 +590,7 @@
     background:var(--green-tint);
   }
   .exercise .advice b{color:var(--green); font-size:15px; font-weight:600; white-space:nowrap;}
+  .exercise .advice .how{display:inline-block; margin-top:4px; font-size:12px;}
   .set-row{display:flex; align-items:center; gap:8px; margin-bottom:8px;}
   .set-row .set-label{
     flex:0 0 auto;
@@ -1705,14 +1706,20 @@ const REPS = {
 };
 const LIMITS_ACC = { knees: 'колени', back: 'спину', shoulders: 'плечи' };
 const SEX_LABELS = { male: 'Мужской', female: 'Женский' };
-// k: estimated one-rep max as a share of body weight for an intermediate man,
-// in the units typed into the set (pair: weight of each of the two dumbbells).
 // Упражнения, где вес обычно не нужен: в них показываем только повторения.
 // Если вес всё же записан (утяжелители, блин на груди), поле кг остаётся.
 const NO_LOAD = new Set(['Подъём ног лёжа', 'Подъём ног в висе', 'Мёртвый жук', 'Птица-собака', 'Скручивания лёжа']);
 function repsOnly(ex){
   return !ex.isTime && NO_LOAD.has(ex.name) && !ex.sets.some(s => Number(s.value1) > 0);
 }
+// Где вес можно понять двояко, подсказываем под упражнением, как его считать.
+// Жим ногами: блины вешают на обе стороны, и цифра без пояснения читается как «на сторону».
+const LOAD_HOW = {
+  'Жим ногами в тренажёре': 'Вес — всех блинов вместе, а не на сторону. Вешаете по 20 кг с каждой стороны — впишите 40.',
+  'Жим ногами / выпады': 'Для жима ногами вес — всех блинов вместе, а не на сторону. По 20 кг с каждой стороны — впишите 40.'
+};
+// k: estimated one-rep max as a share of body weight for an intermediate man,
+// in the units typed into the set (pair: weight of each of the two dumbbells).
 const LOADS = {
   'Приседания со штангой': { k: 1.25, eq: 'barbell', lower: true },
   'Жим штанги лёжа': { k: 0.95, eq: 'barbell' },
@@ -5294,9 +5301,10 @@ function renderWorkout(){
       beats[i] && (!acc || setScore(ex.isTime, s) > setScore(ex.isTime, acc)) ? s : acc
     ), null);
     const adv = ex.advice;
-    const adviceHtml = !adv ? '' : `
+    const how = LOAD_HOW[ex.name] || '';
+    const adviceHtml = !adv && !how ? '' : `
       <p class="advice">
-        ${adv.weight ? `Рекомендуемый вес: <b>${loadLabel(ex.name, adv.weight)}${adv.trend === 'up' ? ' ↑' : adv.trend === 'down' ? ' ↓' : ''}</b><br>` : ''}${adv.text}
+        ${adv && adv.weight ? `Рекомендуемый вес: <b>${loadLabel(ex.name, adv.weight)}${adv.trend === 'up' ? ' ↑' : adv.trend === 'down' ? ' ↓' : ''}</b><br>` : ''}${adv ? adv.text : ''}${how ? `${adv && (adv.weight || adv.text) ? '<br>' : ''}<span class="how">${how}</span>` : ''}
       </p>
     `;
     let working = 0;
