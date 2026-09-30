@@ -953,6 +953,7 @@
   .set-row input:focus-visible,
   .cfg-inputs input:focus-visible{outline:2px solid var(--accent); outline-offset:0;}
   .set-row .unit{font-size:13px; color:var(--text-muted); width:20px;}
+  .set-row .unit.wide{width:auto;}
   .set-row .done-toggle{
     flex:0 0 auto;
     width:30px;
@@ -1706,6 +1707,12 @@ const LIMITS_ACC = { knees: 'колени', back: 'спину', shoulders: 'пл
 const SEX_LABELS = { male: 'Мужской', female: 'Женский' };
 // k: estimated one-rep max as a share of body weight for an intermediate man,
 // in the units typed into the set (pair: weight of each of the two dumbbells).
+// Упражнения, где вес обычно не нужен: в них показываем только повторения.
+// Если вес всё же записан (утяжелители, блин на груди), поле кг остаётся.
+const NO_LOAD = new Set(['Подъём ног лёжа', 'Подъём ног в висе', 'Мёртвый жук', 'Птица-собака', 'Скручивания лёжа']);
+function repsOnly(ex){
+  return !ex.isTime && NO_LOAD.has(ex.name) && !ex.sets.some(s => Number(s.value1) > 0);
+}
 const LOADS = {
   'Приседания со штангой': { k: 1.25, eq: 'barbell', lower: true },
   'Жим штанги лёжа': { k: 0.95, eq: 'barbell' },
@@ -1959,10 +1966,16 @@ function lastPerformance(name, before){
   }
   return null;
 }
+// «40кг×10, 40кг×8» для упражнений с весом, «15, 15, 12 повт.» для тех, где его нет.
+function setsText(isTime, sets, withDrop){
+  const bare = !isTime && sets.every(s => !(Number(s.value1) > 0));
+  const parts = sets.map(s => (withDrop && s.drop ? 'дроп ' : '')
+    + (isTime ? s.value1 + 'сек' : bare ? String(s.value2) : kgText(Number(s.value1) || 0) + 'кг×' + s.value2));
+  return parts.join(', ') + (bare ? ' повт.' : '');
+}
 function hintText(perf){
   if (!perf) return 'ещё не выполнялось';
-  const txt = perf.sets.map(s => perf.isTime ? (s.value1+'сек') : (s.value1+'кг×'+s.value2)).join(', ');
-  return 'прошлый раз: ' + txt;
+  return 'прошлый раз: ' + setsText(perf.isTime, perf.sets, false);
 }
 function kg(w){
   return String(Math.round(w * 100) / 100).replace('.', ',');
@@ -5304,6 +5317,17 @@ function renderWorkout(){
       const tag = s.drop
         ? `<button class="set-label drop" onclick="removeSet(${exIdx},${setIdx})" title="Дропсет — нажмите, чтобы убрать">Д</button>`
         : `<button class="set-label${s.warmup ? ' warm' : ''}" onclick="toggleWarmup(${exIdx},${setIdx})" title="Разминочный подход">${label}</button>`;
+      if (repsOnly(ex)){
+        return `
+          <div class="set-row${beats[setIdx] ? ' record' : ''}${s.warmup ? ' warmup' : ''}">
+            ${tag}
+            <input type="number" inputmode="numeric" placeholder="0" value="${s.value2}" class="${isAuto(s) ? 'auto' : ''}"
+              oninput="setVal(${exIdx},${setIdx},'value2',this.value)">
+            <span class="unit wide">повт.</span>
+            <button class="done-toggle ${s.done?'on':''}" onclick="toggleDone(${exIdx},${setIdx})">${s.done?'✓':''}</button>
+          </div>
+        `;
+      }
       if (ex.isTime){
         return `
           <div class="set-row${beats[setIdx] ? ' record' : ''}${s.warmup ? ' warmup' : ''}">
@@ -5863,8 +5887,7 @@ function renderHistory(){
     const exHtml = s.exercises.map(ex => {
       const sets = countedSets(ex);
       if (!sets.length) return '';
-      const txt = sets.map(st => (st.drop ? 'дроп ' : '')
-        + (ex.isTime ? (st.value1 + 'сек') : (kgText(st.value1) + 'кг×' + st.value2))).join(', ');
+      const txt = setsText(ex.isTime, sets, true);
       return `<div class="hist-ex"><b>${ex.name}</b><br><span class="sets-txt">${txt}</span>${
         ex.note ? `<br><span class="hist-note">💬 ${escapeHtml(ex.note)}</span>` : ''}</div>`;
     }).join('') || '<div class="hist-ex"><span class="sets-txt">Ничего не записано</span></div>';
