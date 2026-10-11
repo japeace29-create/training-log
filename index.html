@@ -1220,6 +1220,7 @@ const DEFAULT_PROGRAM = {
     { name: 'Тяга верхнего блока', sets: 3, repsMin: 10, repsMax: 12 },
     { name: 'Жим гантелей на наклонной скамье', sets: 3, repsMin: 10, repsMax: 12 },
     { name: 'Разведение гантелей в стороны', sets: 3, repsMin: 12, repsMax: 15 },
+    { name: 'Подъём гантелей на бицепс', sets: 3, repsMin: 12, repsMax: 15 },
     { name: 'Подъём ног в висе', sets: 3, repsMin: 15, repsMax: 15 },
     { name: 'Скручивания на блоке', sets: 3, repsMin: 15, repsMax: 20 }
   ]
@@ -1589,7 +1590,7 @@ const SLOTS = {
       { name: 'Выпады назад', eq: 'none', role: 'iso', avoid: ['bmi','caution','knees'] },
       { name: 'Ягодичный мост', eq: 'none', role: 'iso' }
     ]},
-    { stage: 3, variants: [
+    { stage: 2, variants: [
       { name: 'Разгибание рук на блоке', eq: 'gym', role: 'iso' },
       { name: 'Разгибание руки с гантелью в наклоне', eq: 'dumbbells', role: 'iso' },
       { name: 'Обратные отжимания от стула', eq: 'none', role: 'iso', avoid: ['beginner','bmi','caution','shoulders'] },
@@ -1652,6 +1653,13 @@ const SLOTS = {
       { name: 'Скручивания на блоке', eq: 'gym', role: 'core', avoid: ['back'] },
       { name: 'Скручивания лёжа', eq: 'none', role: 'core', avoid: ['back'] },
       { name: 'Боковая планка', eq: 'none', role: 'time' }
+    ]},
+    // Номер у слота — по порядку в массиве, на нём держатся замены и пары, поэтому новые
+    // слоты дописываем в конец. after — после какого слота показывать, чтобы руки
+    // шли до пресса, а не после него.
+    { stage: 2, after: 5, variants: [
+      { name: 'Подъём гантелей на бицепс', eq: 'dumbbells', role: 'iso' },
+      { name: 'Подъём на бицепс с рюкзаком', eq: 'none', role: 'iso' }
     ]}
   ],
   // Третий день для тех, кто ходит трижды в неделю: те же движения,
@@ -1683,7 +1691,7 @@ const SLOTS = {
       { name: 'Румынская тяга с гантелями', eq: 'dumbbells', role: 'iso', avoid: ['back'] },
       { name: 'Сгибание ног на полотенце', eq: 'none', role: 'iso' }
     ]},
-    { stage: 3, variants: [
+    { stage: 2, variants: [
       { name: 'Подъём гантелей на бицепс', eq: 'dumbbells', role: 'iso' },
       { name: 'Разгибание рук на блоке', eq: 'gym', role: 'iso' },
       { name: 'Подъём на бицепс с рюкзаком', eq: 'none', role: 'iso' }
@@ -1779,7 +1787,7 @@ const QUIZ = [
   ]},
   { id: 'duration', title: 'Сколько времени на одну тренировку?', options: [
     ['short', 'До 45 минут', '5 упражнений'],
-    ['normal', 'Около часа', '7 упражнений'],
+    ['normal', 'Около часа', '8 упражнений'],
     ['long', 'Больше часа', '8–9 упражнений, больше подходов в базовых']
   ]},
   { id: 'limits', multi: true, title: 'Есть ли боли или травмы?', subtitle: 'Можно выбрать несколько', options: [
@@ -2132,7 +2140,7 @@ function buildProgram(p, doneCount){
   const result = {};
   activeDays().forEach(type => {
     const used = new Set();
-    result[type] = SLOTS[type]
+    const built = SLOTS[type]
       .map((slot, index) => ({ slot, index }))
       .filter(({ slot }) => (slot.stage || 1) <= stage.slots)
       .map(({ slot, index }) => {
@@ -2143,8 +2151,13 @@ function buildProgram(p, doneCount){
           || fits.find(v => !(v.avoid || []).some(t => tags.has(t)))
           || fits[fits.length - 1];
         used.add(v.name);
-        return { name: v.name, ...planFor(v.role, p, tags, stage, reps), type, slot: index };
+        return {
+          at: slot.after != null ? slot.after + 0.5 : index,
+          entry: { name: v.name, ...planFor(v.role, p, tags, stage, reps), type, slot: index }
+        };
       });
+    // Выбор вариантов шёл по номерам слотов, а показываем в порядке тренировки.
+    result[type] = built.sort((a, b) => a.at - b.at).map(x => x.entry);
     // Свои упражнения идут после программных, в конце дня. Номер слота берём
     // заведомо больше готовых, чтобы не путался с ними в заменах и парах.
     custom.filter(c => c.type === type).forEach((c, i) => {
