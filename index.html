@@ -607,6 +607,12 @@
   }
   .set-row .set-label.warm{color:var(--orange); font-weight:700;}
   .set-row.warmup input{background:transparent; box-shadow:inset 0 0 0 1px var(--separator);}
+  .cardio-head,
+  .cardio-row{display:grid; grid-template-columns:26px 1fr 1fr; gap:8px; align-items:center; margin-bottom:8px;}
+  .cardio-head span{font-size:12px; color:var(--text-muted);}
+  .cardio-row .min{font-size:14px; color:var(--text-muted); text-align:center;}
+  .cardio-actions{display:flex; gap:16px; flex-wrap:wrap; margin-top:4px;}
+  .cardio-last{font-size:13px; color:var(--text-muted); margin:0 0 10px;}
   .plates{
     margin:-2px 0 8px 30px;
     font-size:12px;
@@ -937,6 +943,7 @@
     cursor:pointer;
   }
   .set-row input,
+  .cardio-row input,
   .cfg-inputs input{
     width:100%;
     background:var(--surface-2);
@@ -948,10 +955,13 @@
     font-size:16px;
     font-variant-numeric:tabular-nums;
   }
-  .set-row input::placeholder{color:var(--text-faint);}
+  .set-row input::placeholder,
+  .cardio-row input::placeholder{color:var(--text-faint);}
   /* Подставленное из прошлой тренировки: серым, пока не подтвердили. */
-  .set-row input.auto{color:var(--text-muted);}
+  .set-row input.auto,
+  .cardio-row input.auto{color:var(--text-muted);}
   .set-row input:focus-visible,
+  .cardio-row input:focus-visible,
   .cfg-inputs input:focus-visible{outline:2px solid var(--accent); outline-offset:0;}
   .set-row .unit{font-size:13px; color:var(--text-muted); width:20px;}
   .set-row .unit.wide{width:auto;}
@@ -1875,6 +1885,7 @@ let swapOpen = null;       // у какого слота открыт списо
 let progressOpen = null;   // у какого упражнения раскрыт график
 let howtoOpen = null;      // у какого упражнения раскрыта техника
 let draftNote = '';        // заметка ко всей тренировке
+let draftCardio = null;    // ходьба на дорожке: { steps: [{ speed, incline }] по минутам, seeded — серые цифры прошлого раза }
 let draftDate = null;      // правим прошлую тренировку — её дата, иначе сегодня
 let deleteArmed = null;    // дата тренировки, удаление которой ждёт подтверждения
 let exportNote = '';       // что ответил сервер на выгрузку или восстановление
@@ -2343,7 +2354,7 @@ function writeCache(pending){
       pairs,
       deload,
       monthly,
-      draft: activeType && draft ? { type: activeType, exercises: draft, date: draftDate, note: draftNote, deload: draftDeload, clock: draftClock } : null,
+      draft: activeType && draft ? { type: activeType, exercises: draft, date: draftDate, note: draftNote, deload: draftDeload, clock: draftClock, cardio: draftCardio } : null,
       pending: !!pending,
       at: Date.now()
     }));
@@ -2381,6 +2392,7 @@ function applyData(data){
     draftNote = saved.note || '';
     draftDeload = !!saved.deload;
     draftClock = (saved.clock && typeof saved.clock === 'object') ? saved.clock : null;
+    draftCardio = (saved.cardio && Array.isArray(saved.cardio.steps)) ? saved.cardio : null;
     view = 'workout';
   } else {
     activeType = null;
@@ -2389,6 +2401,7 @@ function applyData(data){
     draftNote = '';
     draftDeload = false;
     draftClock = null;
+    draftCardio = null;
     // Бот умеет открыть приложение сразу на нужной вкладке.
     const wanted = new URLSearchParams(location.search).get('tab');
     view = TABS.some(t => t.id === wanted) ? wanted : (wanted === 'compete' ? 'compete' : 'today');
@@ -2508,7 +2521,7 @@ async function sendSave(){
         pairs,
         goal: weekGoal,
         split,
-        draft: activeType && draft ? { type: activeType, exercises: draft, date: draftDate, note: draftNote, deload: draftDeload, clock: draftClock } : null
+        draft: activeType && draft ? { type: activeType, exercises: draft, date: draftDate, note: draftNote, deload: draftDeload, clock: draftClock, cardio: draftCardio } : null
       })
     });
     if (res.status === 401){
@@ -3283,6 +3296,141 @@ function setWorkoutNote(value){
   draftNote = value.slice(0, 500);
   scheduleSave();
 }
+// ---------- ходьба на дорожке ----------------------------------------------------------
+// Минута за строкой: скорость и наклон меняются по ходу, а итог (время, путь) считается сам.
+// Наклон хранится числом без единицы: на дорожках он то в процентах, то в градусах.
+const CARDIO_MINUTES = 10;
+const CARDIO_MAX = 60;
+function cardioNum(v){
+  const n = Number(String(v == null ? '' : v).replace(',', '.'));
+  return n > 0 ? Math.round(n * 10) / 10 : 0;
+}
+// Конец ходьбы — последняя минута со скоростью: пустые строки внизу не считаются.
+function cardioSteps(steps){
+  let end = steps.length;
+  while (end > 0 && !cardioNum(steps[end - 1].speed)) end--;
+  return steps.slice(0, end).map(x => ({ speed: cardioNum(x.speed), incline: cardioNum(x.incline) }));
+}
+function cardioLine(list){
+  if (!list.length) return '';
+  const km = list.reduce((t, x) => t + x.speed, 0) / 60;   // каждая строка — одна минута
+  const avg = list.reduce((t, x) => t + x.speed, 0) / list.length;
+  const low = Math.min(...list.map(x => x.incline));
+  const high = Math.max(...list.map(x => x.incline));
+  const parts = [list.length + ' мин', kg(Math.round(km * 100) / 100) + ' км', 'средняя ' + kg(Math.round(avg * 10) / 10) + ' км/ч'];
+  if (high > 0) parts.push('наклон ' + (low !== high ? 'от ' + kg(low) + ' до ' + kg(high) : kg(high)));
+  return parts.join(' · ');
+}
+function cardioList(list, field){
+  return list.map(x => kg(x[field])).join(' · ');
+}
+// Последняя ходьба до этой даты: от неё отталкиваемся, чтобы не вписывать всё заново.
+function lastCardio(before){
+  for (let i = sessions.length - 1; i >= 0; i--){
+    const x = sessions[i];
+    if (before && x.date >= before) continue;
+    const steps = x.cardio && Array.isArray(x.cardio.steps) ? cardioSteps(x.cardio.steps) : [];
+    if (steps.length) return { date: x.date, steps };
+  }
+  return null;
+}
+function openCardio(){
+  const last = lastCardio(draftDate || todayStr());
+  draftCardio = last
+    ? { seeded: true, steps: last.steps.map(x => ({ speed: String(x.speed), incline: x.incline ? String(x.incline) : '' })) }
+    : { seeded: false, steps: Array.from({ length: CARDIO_MINUTES }, () => ({ speed: '', incline: '' })) };
+  render();
+  scheduleSave();
+}
+function removeCardio(){
+  draftCardio = null;
+  render();
+  scheduleSave();
+}
+// Серое — как в прошлый раз. Поправили любую цифру или длину — ходьба считается целиком.
+function takeCardio(){
+  if (!draftCardio || !draftCardio.seeded) return false;
+  draftCardio.seeded = false;
+  return true;
+}
+function confirmCardio(){
+  takeCardio();
+  render();
+  scheduleSave();
+}
+function setCardio(i, field, value){
+  const c = draftCardio;
+  if (!c || !c.steps[i]) return;
+  c.steps[i][field] = value;
+  if (takeCardio()){
+    document.querySelectorAll('.cardio-row input.auto').forEach(el => el.classList.remove('auto'));
+    const hint = document.getElementById('cardio-seed');
+    if (hint) hint.remove();
+  }
+  const sum = document.getElementById('cardio-sum');
+  if (sum) sum.textContent = cardioSummary();
+  scheduleSave();
+}
+function addCardioMinute(){
+  const c = draftCardio;
+  if (!c || c.steps.length >= CARDIO_MAX) return;
+  const last = c.steps[c.steps.length - 1] || { speed: '', incline: '' };
+  c.steps.push({ speed: last.speed, incline: last.incline });
+  takeCardio();
+  render();
+  scheduleSave();
+}
+function dropCardioMinute(){
+  const c = draftCardio;
+  if (!c || c.steps.length <= 1) return;
+  c.steps.pop();
+  takeCardio();
+  render();
+  scheduleSave();
+}
+function cardioSummary(){
+  const list = cardioSteps(draftCardio.steps);
+  return list.length ? cardioLine(list) : 'Впишите скорость хотя бы в первую минуту';
+}
+function renderCardio(){
+  if (!draftCardio){
+    const last = lastCardio(draftDate || todayStr());
+    return `
+      <div class="card">
+        <p class="eyebrow">Дорожка</p>
+        ${last ? `<p class="cardio-last">прошлый раз: ${cardioLine(last.steps)}</p>` : ''}
+        <button class="add-warmup" onclick="openCardio()">＋ Ходьба на дорожке</button>
+      </div>
+    `;
+  }
+  const c = draftCardio;
+  const rows = c.steps.map((x, i) => `
+    <div class="cardio-row">
+      <span class="min">${i + 1}</span>
+      <input type="number" inputmode="decimal" step="0.1" min="0" placeholder="0" value="${escapeHtml(x.speed)}" class="${c.seeded ? 'auto' : ''}"
+        oninput="setCardio(${i},'speed',this.value)">
+      <input type="number" inputmode="decimal" step="0.5" min="0" placeholder="0" value="${escapeHtml(x.incline)}" class="${c.seeded ? 'auto' : ''}"
+        oninput="setCardio(${i},'incline',this.value)">
+    </div>
+  `).join('');
+  return `
+    <div class="card">
+      <div class="wo-head">
+        <p class="eyebrow">Дорожка</p>
+        <button class="wo-edit" onclick="removeCardio()">Убрать</button>
+      </div>
+      ${c.seeded ? `<div id="cardio-seed"><p class="adv-hint" style="margin:0 0 10px;">Серое — как в прошлый раз. Всё так же — нажмите кнопку. Поправили любую цифру — запишется вся ходьба. Не тронули — не запишется.</p>
+        <button class="btn btn-outline" style="margin-bottom:12px;" onclick="confirmCardio()">Как в прошлый раз ✓</button></div>` : ''}
+      <div class="cardio-head"><span>мин</span><span>скорость, км/ч</span><span>наклон</span></div>
+      ${rows}
+      <div class="cardio-actions">
+        <button class="add-warmup" onclick="addCardioMinute()">＋ минута</button>
+        <button class="add-warmup" onclick="dropCardioMinute()">− минута</button>
+      </div>
+      <p class="plates" id="cardio-sum" style="margin:8px 0 0;">${cardioSummary()}</p>
+    </div>
+  `;
+}
 const WEEK_GOALS = [2, 3, 4, 5];
 // Неделя считается с понедельника — так же, как её считает человек.
 function weekStart(dateStr){
@@ -3851,6 +3999,8 @@ function buildAiText(weeks){
       const before = exerciseRecord(ex.name, x.date);
       lines.push('  ' + ex.name + (before && top > before.score ? ' ★' : '') + ': ' + sets.map(st => setLine(ex, st)).join(', ') + (ex.note ? ' (' + ex.note + ')' : ''));
     });
+    const walk = x.cardio && Array.isArray(x.cardio.steps) ? cardioSteps(x.cardio.steps) : [];
+    if (walk.length) lines.push('  Ходьба на дорожке: ' + cardioLine(walk) + '. Скорость по минутам (км/ч): ' + cardioList(walk, 'speed') + '. Наклон по минутам: ' + cardioList(walk, 'incline') + '.');
     if (x.note) lines.push('  Общая заметка: ' + x.note);
     return lines.join('\n');
   });
@@ -4402,6 +4552,7 @@ function startWorkout(type, prefill){
   activeType = type;
   draftDate = null;
   draftNote = (prefill && prefill.note) || '';
+  draftCardio = null;
   draft = program[type].map(ex => {
     const prev = prefill && prefill.exercises.find(e => e.name === ex.name);
     return draftExercise(ex, prev);
@@ -4423,6 +4574,9 @@ function editSession(date){
   activeType = entry.type;
   draftDate = date === todayStr() ? null : date;
   draftNote = entry.note || '';
+  draftCardio = entry.cardio && Array.isArray(entry.cardio.steps) && entry.cardio.steps.length
+    ? { seeded: false, steps: entry.cardio.steps.map(x => ({ speed: String(x.speed || ''), incline: x.incline ? String(x.incline) : '' })) }
+    : null;
   draft = entry.exercises.map(ex => {
     const known = inProgram.find(e => e.name === ex.name);
     return {
@@ -4476,6 +4630,7 @@ async function cancelWorkout(){
   const edited = draftDate;
   draftDeload = false;
   draftClock = null;
+  draftCardio = null;
   activeType = null; draft = null; draftDate = null; draftNote = '';
   view = edited ? 'history' : 'today';
   render();
@@ -4483,12 +4638,15 @@ async function cancelWorkout(){
 }
 async function finishWorkout(){
   const minutes = clockMinutes(draftClock);
+  // Серые цифры прошлой ходьбы, которые не подтвердили, — это не ходьба.
+  const walk = draftCardio && !draftCardio.seeded ? cardioSteps(draftCardio.steps) : [];
   const entry = {
     date: draftDate || todayStr(),
     type: activeType,
     note: draftNote.trim(),
     ...(draftDeload ? { deload: true } : {}),
     ...(minutes ? { minutes } : {}),
+    ...(walk.length ? { cardio: { steps: walk } } : {}),
     exercises: draft.map(ex => ({
       name: ex.name,
       isTime: ex.isTime,
@@ -4517,6 +4675,7 @@ async function finishWorkout(){
   const edited = draftDate;
   draftDeload = false;
   draftClock = null;
+  draftCardio = null;
   activeType = null; draft = null; draftDate = null; draftNote = '';
   view = edited ? 'history' : 'today';
   if (profile) program = buildProgram(profile);
@@ -5436,6 +5595,7 @@ function renderWorkout(){
       ${pairHint}
       ${exercisesHtml}
     </div>
+    ${renderCardio()}
     <div class="card">
       <p class="eyebrow">Как прошла тренировка</p>
       <textarea class="note-input autogrow" rows="2" maxlength="500" placeholder="Самочувствие, что мешало, что получилось"
@@ -5905,13 +6065,15 @@ function renderHistory(){
     </div>
   `).join('');
   const items = [...sessions].reverse().map(s => {
-    const exHtml = s.exercises.map(ex => {
+    const walkSteps = s.cardio && Array.isArray(s.cardio.steps) ? cardioSteps(s.cardio.steps) : [];
+    const walkHtml = walkSteps.length ? `<div class="hist-ex"><b>Дорожка</b><br><span class="sets-txt">${cardioLine(walkSteps)}</span><br><span class="sets-txt">скорость: ${cardioList(walkSteps, 'speed')}</span><br><span class="sets-txt">наклон: ${cardioList(walkSteps, 'incline')}</span></div>` : '';
+    const exHtml = (s.exercises.map(ex => {
       const sets = countedSets(ex);
       if (!sets.length) return '';
       const txt = setsText(ex.isTime, sets, true);
       return `<div class="hist-ex"><b>${ex.name}</b><br><span class="sets-txt">${txt}</span>${
         ex.note ? `<br><span class="hist-note">💬 ${escapeHtml(ex.note)}</span>` : ''}</div>`;
-    }).join('') || '<div class="hist-ex"><span class="sets-txt">Ничего не записано</span></div>';
+    }).join('') + walkHtml) || '<div class="hist-ex"><span class="sets-txt">Ничего не записано</span></div>';
     return `
       <details class="hist-item">
         <summary>
