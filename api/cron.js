@@ -75,7 +75,9 @@ function reminderText(data, local){
   const sessions = Array.isArray(data.sessions) ? data.sessions : [];
   // Очередь зависит от того, две тренировки в программе или три.
   const days = data.split === 3 ? ['A', 'B', 'C'] : ['A', 'B'];
-  const previous = sessions.length ? sessions[sessions.length - 1].type : null;
+  // Щадящая тренировка («S») вне очереди: напоминаем о той, что ждала бы без неё.
+  const regular = sessions.filter(s => s && s.type !== 'S');
+  const previous = regular.length ? regular[regular.length - 1].type : null;
   const type = days[(days.indexOf(previous) + 1) % days.length];
   const last = sessions.length ? sessions[sessions.length - 1].date : null;
   let tail = 'Это ваша первая тренировка — начнём с лёгкого.';

@@ -612,6 +612,22 @@
   .cardio-head span{font-size:12px; color:var(--text-muted);}
   .cardio-row .min{font-size:14px; color:var(--text-muted); text-align:center;}
   .cardio-actions{display:flex; gap:16px; flex-wrap:wrap; margin-top:4px;}
+  .pick{display:flex; flex-wrap:wrap; gap:8px; margin:4px 0;}
+  .pick button{
+    padding:10px 14px;
+    border-radius:var(--radius-s);
+    border:1px solid var(--separator);
+    background:var(--surface-2);
+    color:var(--text-muted);
+    font:inherit;
+    font-size:14px;
+    font-weight:600;
+    cursor:pointer;
+  }
+  .pick button.on{background:var(--accent); border-color:var(--accent); color:#fff;}
+  .pain-row{display:flex; justify-content:space-between; gap:10px; padding:9px 0; border-top:1px solid var(--separator); font-size:14px;}
+  .pain-row:first-of-type{border-top:none;}
+  .pain-row span{color:var(--text-muted); font-size:12px; white-space:nowrap;}
   .cardio-last{font-size:13px; color:var(--text-muted); margin:0 0 10px;}
   .plates{
     margin:-2px 0 8px 30px;
@@ -1526,7 +1542,7 @@ const HOWTO = {
     e: ['Отрыв поясницы от пола', 'Опускание ног рывком']
   }
 };
-const TYPE_LABELS = { A: 'Тренировка A', B: 'Тренировка B', C: 'Тренировка C' };
+const TYPE_LABELS = { A: 'Тренировка A', B: 'Тренировка B', C: 'Тренировка C', S: 'Щадящая тренировка' };
 const SPLITS = { 2: ['A', 'B'], 3: ['A', 'B', 'C'] };
 function activeDays(){
   return SPLITS[split] || SPLITS[2];
@@ -1885,6 +1901,9 @@ let swapOpen = null;       // у какого слота открыт списо
 let progressOpen = null;   // у какого упражнения раскрыт график
 let howtoOpen = null;      // у какого упражнения раскрыта техника
 let draftNote = '';        // заметка ко всей тренировке
+let draftPain = [];        // что болело, когда собирали щадящую тренировку: back / shoulders / knees
+let painAreas = [];        // экран «Что-то болит»: выбранные места
+let painGroups = [];       // и выбранные группы мышц
 let draftCardio = null;    // ходьба на дорожке: { steps: [{ speed, incline }] по минутам, seeded — серые цифры прошлого раза }
 let draftDate = null;      // правим прошлую тренировку — её дата, иначе сегодня
 let deleteArmed = null;    // дата тренировки, удаление которой ждёт подтверждения
@@ -1965,7 +1984,9 @@ function formatDateRu(dateStr){
 }
 function nextType(){
   const days = activeDays();
-  const last = sessions.length ? sessions[sessions.length - 1].type : null;
+  // Щадящая тренировка — вне очереди: после неё ждёт та же, что ждала бы без неё.
+  const regular = sessions.filter(s => s.type !== PAIN_TYPE);
+  const last = regular.length ? regular[regular.length - 1].type : null;
   return days[(days.indexOf(last) + 1) % days.length];
 }
 function todaysSession(){
@@ -2354,7 +2375,7 @@ function writeCache(pending){
       pairs,
       deload,
       monthly,
-      draft: activeType && draft ? { type: activeType, exercises: draft, date: draftDate, note: draftNote, deload: draftDeload, clock: draftClock, cardio: draftCardio } : null,
+      draft: activeType && draft ? { type: activeType, exercises: draft, date: draftDate, note: draftNote, deload: draftDeload, clock: draftClock, cardio: draftCardio, pain: draftPain } : null,
       pending: !!pending,
       at: Date.now()
     }));
@@ -2385,7 +2406,7 @@ function applyData(data){
   }
   program = profile ? buildProgram(profile) : DEFAULT_PROGRAM;
   const saved = data.draft;
-  if (saved && program[saved.type] && Array.isArray(saved.exercises)){
+  if (saved && (program[saved.type] || saved.type === PAIN_TYPE) && Array.isArray(saved.exercises)){
     activeType = saved.type;
     draft = saved.exercises;
     draftDate = saved.date || null;
@@ -2393,6 +2414,7 @@ function applyData(data){
     draftDeload = !!saved.deload;
     draftClock = (saved.clock && typeof saved.clock === 'object') ? saved.clock : null;
     draftCardio = (saved.cardio && Array.isArray(saved.cardio.steps)) ? saved.cardio : null;
+    draftPain = Array.isArray(saved.pain) ? saved.pain : [];
     view = 'workout';
   } else {
     activeType = null;
@@ -2402,6 +2424,7 @@ function applyData(data){
     draftDeload = false;
     draftClock = null;
     draftCardio = null;
+    draftPain = [];
     // Бот умеет открыть приложение сразу на нужной вкладке.
     const wanted = new URLSearchParams(location.search).get('tab');
     view = TABS.some(t => t.id === wanted) ? wanted : (wanted === 'compete' ? 'compete' : 'today');
@@ -2521,7 +2544,7 @@ async function sendSave(){
         pairs,
         goal: weekGoal,
         split,
-        draft: activeType && draft ? { type: activeType, exercises: draft, date: draftDate, note: draftNote, deload: draftDeload, clock: draftClock, cardio: draftCardio } : null
+        draft: activeType && draft ? { type: activeType, exercises: draft, date: draftDate, note: draftNote, deload: draftDeload, clock: draftClock, cardio: draftCardio, pain: draftPain } : null
       })
     });
     if (res.status === 401){
@@ -3431,6 +3454,187 @@ function renderCardio(){
     </div>
   `;
 }
+// ---------- «Что-то болит» ---------------------------------------------------------------
+// Из выбранных групп мышц собирается тренировка без упражнений, которые нагружают больное
+// место. Тип у такой тренировки свой: очередь A/B она не сдвигает.
+const PAIN_TYPE = 'S';
+const PAIN_AREAS = [['back', 'Спина / поясница'], ['shoulders', 'Плечи'], ['knees', 'Колени']];
+const PAIN_PHRASE = { back: 'болит спина / поясница', shoulders: 'болят плечи', knees: 'болят колени' };
+const PAIN_ORDER = ['Ноги', 'Грудь', 'Спина', 'Плечи', 'Руки', 'Пресс'];
+// Что нагружает каждое место. Таблица ручная и осторожная: лучше лишний раз не предложить,
+// чем предложить то, что отзовётся. Упражнения, которых здесь нет, считаются безопасными.
+const PAIN_STRESS = {
+  'Приседания со штангой': ['back', 'knees'],
+  'Гоблет-присед с гантелью': ['back', 'knees'],
+  'Жим ногами в тренажёре': ['knees'],
+  'Жим ногами / выпады': ['knees'],
+  'Приседания на скамью': ['knees'],
+  'Разгибание ног в тренажёре': ['knees'],
+  'Выпады назад': ['knees'],
+  'Выпады назад с гантелями': ['knees'],
+  'Становая тяга': ['back'],
+  'Румынская тяга с гантелями': ['back'],
+  'Ягодичный мост со штангой': ['back'],
+  'Жим штанги лёжа': ['shoulders'],
+  'Жим гантелей лёжа': ['shoulders'],
+  'Жим гантелей лёжа на полу': ['shoulders'],
+  'Жим гантелей на наклонной скамье': ['shoulders'],
+  'Жим в тренажёре от груди': ['shoulders'],
+  'Отжимания': ['shoulders'],
+  'Отжимания от опоры': ['shoulders'],
+  'Тяга штанги в наклоне': ['back'],
+  'Тяга горизонтального блока': ['back'],
+  'Тяга гантели в наклоне с опорой': ['back'],
+  'Тяга рюкзака в наклоне': ['back'],
+  'Тяга верхнего блока': ['back', 'shoulders'],
+  'Пуловер с гантелью лёжа': ['back', 'shoulders'],
+  'Жим гантелей сидя': ['shoulders'],
+  'Пайк-отжимания': ['shoulders'],
+  'Тяга к лицу на блоке': ['back', 'shoulders'],
+  'Разведение гантелей в наклоне': ['back', 'shoulders'],
+  'Y-подъёмы лёжа': ['back', 'shoulders'],
+  'Разведение гантелей в стороны': ['shoulders'],
+  'Разгибание руки с гантелью в наклоне': ['back'],
+  'Обратные отжимания от стула': ['shoulders'],
+  'Отжимания от опоры узким хватом': ['shoulders'],
+  'Русские скручивания': ['back'],
+  'Подъём ног в висе': ['back', 'shoulders'],
+  'Подъём ног лёжа': ['back'],
+  'Птица-собака': ['back'],
+  'Скручивания на блоке': ['back'],
+  'Скручивания лёжа': ['back'],
+  'Боковая планка': ['shoulders']
+};
+// Одно и то же движение под двумя названиями: берём одно.
+const SAME_MOVE = { 'Жим ногами / выпады': 'Жим ногами в тренажёре' };
+function painHit(name, areas){
+  const hit = PAIN_STRESS[name] || [];
+  return areas.some(a => hit.includes(a));
+}
+function primaryMuscle(name){
+  return ((HOWTO[name] && HOWTO[name].m) || '').split(',')[0].trim();
+}
+// Что войдёт в тренировку. Сначала упражнения из вашей программы (по ним есть история и веса),
+// потом остальное из библиотеки для вашего инвентаря. От каждой группы берём по очереди
+// разные мышцы, чтобы руки были не из трёх трицепсов.
+function painPlan(areas, groups){
+  const result = { list: [], empty: [] };
+  if (!groups.length) return result;
+  const rank = EQ_RANK[(profile && profile.place) || 'gym'];
+  const tags = profile ? profileTags(profile) : new Set();
+  const pool = new Map();
+  const put = (name, entry, mine, eq, role, order) => {
+    const key = SAME_MOVE[name] || name;
+    if (pool.has(key)) return;
+    pool.set(key, { name, entry, mine, eq, role, order });
+  };
+  let order = 0;
+  activeDays().forEach(type => (program[type] || []).forEach(e => {
+    // Свои упражнения мы не знаем: что они нагружают, неизвестно, поэтому при боли их не берём.
+    if (e.custom && areas.length) return;
+    put(e.name, { ...e, slot: null }, true, 'gym', roleOf(e.name), order++);
+  }));
+  const reps = profile ? REPS[tags.has('caution') ? 'health' : profile.goal] : null;
+  Object.keys(SLOTS).forEach(type => SLOTS[type].forEach(slot => slot.variants.forEach(v => {
+    if (EQ_RANK[v.eq] > rank || (v.avoid || []).some(t => tags.has(t))) return;
+    const entry = profile
+      ? { name: v.name, ...planFor(v.role, profile, tags, stageInfo(profile), reps), slot: null }
+      : { name: v.name, sets: 3, repsMin: 8, repsMax: 12, isTime: v.role === 'time', slot: null };
+    put(v.name, entry, false, v.eq, v.role, order++);
+  })));
+  const total = profile ? ({ short: 5, normal: 8, long: 9 }[profile.duration] || 8) : 7;
+  const per = Math.max(1, Math.min(4, Math.round(total / groups.length)));
+  groups.forEach(group => {
+    const items = [...pool.values()]
+      .filter(it => groupOf(it.name) === group && !painHit(it.name, areas))
+      .sort((a, b) => (b.mine - a.mine) || (EQ_RANK[b.eq] - EQ_RANK[a.eq]) || ((b.role === 'main') - (a.role === 'main')) || (a.order - b.order));
+    if (!items.length){ result.empty.push(group); return; }
+    // По кругу по мышцам: сначала лучшее на каждую, потом вторые и так до нужного числа.
+    const buckets = new Map();
+    items.forEach(it => {
+      const m = primaryMuscle(it.name);
+      if (!buckets.has(m)) buckets.set(m, []);
+      buckets.get(m).push(it);
+    });
+    const picked = [];
+    while (picked.length < per && [...buckets.values()].some(b => b.length)){
+      for (const b of buckets.values()){
+        if (picked.length >= per) break;
+        if (b.length) picked.push(b.shift());
+      }
+    }
+    picked.forEach(it => result.list.push({ name: it.name, group, entry: it.entry }));
+  });
+  result.list.sort((a, b) => PAIN_ORDER.indexOf(a.group) - PAIN_ORDER.indexOf(b.group));
+  return result;
+}
+function openPain(){
+  painAreas = [];
+  painGroups = [];
+  view = 'pain';
+  render();
+  window.scrollTo(0, 0);
+}
+function cancelPain(){
+  view = 'today';
+  render();
+}
+function togglePainArea(id){
+  painAreas = painAreas.includes(id) ? painAreas.filter(x => x !== id) : [...painAreas, id];
+  render();
+}
+function togglePainGroup(group){
+  painGroups = painGroups.includes(group) ? painGroups.filter(x => x !== group) : [...painGroups, group];
+  render();
+}
+function startPain(){
+  const plan = painPlan(painAreas, painGroups);
+  if (!plan.list.length) return;
+  orderMode = false; addOpen = false; swapRemember = false;
+  draftDeload = deloadActive();
+  draftClock = { start: Date.now(), first: null, last: null };
+  activeType = PAIN_TYPE;
+  draftDate = null;
+  draftNote = '';
+  draftCardio = null;
+  draftPain = painAreas.slice();
+  draft = plan.list.map(x => draftExercise(x.entry, null));
+  view = 'workout';
+  render();
+  window.scrollTo(0, 0);
+  saveAll();
+}
+function renderPain(){
+  const plan = painPlan(painAreas, painGroups);
+  const areaChips = PAIN_AREAS.map(([id, label]) => `<button class="${painAreas.includes(id) ? 'on' : ''}" onclick="togglePainArea('${id}')">${label}</button>`).join('');
+  const groupChips = GROUPS.map(g => `<button class="${painGroups.includes(g) ? 'on' : ''}" onclick="togglePainGroup('${g}')">${g}</button>`).join('');
+  const rows = plan.list.map(x => `<div class="pain-row"><b>${escapeHtml(x.name)}</b><span>${x.group}</span></div>`).join('');
+  const empty = plan.empty.length
+    ? `<p class="swap-note" style="margin:10px 0 0;">${plan.empty.map(g => '«' + g + '»').join(', ')}: без нагрузки на больное место подходящего нет, пропускаем.</p>` : '';
+  const preview = !painGroups.length
+    ? `<p class="swap-note" style="margin:0;">Выберите, что качаем, и здесь появится тренировка.</p>`
+    : plan.list.length ? rows + empty : `<p class="swap-note" style="margin:0;">Для такого сочетания ничего не нашлось. Выберите другие группы или снимите место.</p>`;
+  return `
+    <div class="card">
+      <p class="eyebrow">Что-то болит</p>
+      <p class="quiz-title" style="margin:0 0 6px;">Что болит?</p>
+      <div class="pick">${areaChips}</div>
+      <p class="swap-note" style="margin:10px 0 0;">Упражнения, которые нагружают это место, не предложим. Можно ничего не выбирать. Боль острая, отдаёт в ногу или руку, после травмы — лучше к врачу, а не в зал.</p>
+    </div>
+    <div class="card">
+      <p class="quiz-title" style="margin:0 0 6px;">Что качаем сегодня?</p>
+      <div class="pick">${groupChips}</div>
+    </div>
+    <div class="card">
+      <p class="eyebrow">Получится</p>
+      ${preview}
+    </div>
+    <div class="row-2">
+      <button class="btn btn-outline narrow" onclick="cancelPain()">Отмена</button>
+      <button class="btn btn-primary" onclick="startPain()" ${plan.list.length ? '' : 'disabled'}>Собрать тренировку</button>
+    </div>
+  `;
+}
 const WEEK_GOALS = [2, 3, 4, 5];
 // Неделя считается с понедельника — так же, как её считает человек.
 function weekStart(dateStr){
@@ -3989,7 +4193,7 @@ function buildAiText(weeks){
   }
   parts.push('Обозначения: вес×повторения; Р — разминка, Д — дропсет, ★ — новый рекорд.');
   const blocks = list.map(x => {
-    const lines = [dayText(x.date) + ' · Тренировка ' + x.type + (x.minutes ? ' · ' + minutesText(x.minutes) : '') + (x.deload ? ' · разгрузочная неделя' : '') + ':'];
+    const lines = [dayText(x.date) + ' · ' + (x.type === PAIN_TYPE ? 'Щадящая тренировка' + (Array.isArray(x.pain) && x.pain.length ? ' (болело: ' + x.pain.map(a => (PAIN_AREAS.find(p => p[0] === a) || [a, a])[1].toLowerCase()).join(', ') + ')' : '') : 'Тренировка ' + x.type) + (x.minutes ? ' · ' + minutesText(x.minutes) : '') + (x.deload ? ' · разгрузочная неделя' : '') + ':'];
     x.exercises.forEach(ex => {
       // Разминка в текст тоже идёт — с пометкой «Р»: по ней видно, как человек подходит к рабочему весу.
       const sets = ex.sets.filter(st => Number(ex.isTime ? st.value1 : st.value2) > 0);
@@ -4553,6 +4757,7 @@ function startWorkout(type, prefill){
   draftDate = null;
   draftNote = (prefill && prefill.note) || '';
   draftCardio = null;
+  draftPain = [];
   draft = program[type].map(ex => {
     const prev = prefill && prefill.exercises.find(e => e.name === ex.name);
     return draftExercise(ex, prev);
@@ -4574,6 +4779,7 @@ function editSession(date){
   activeType = entry.type;
   draftDate = date === todayStr() ? null : date;
   draftNote = entry.note || '';
+  draftPain = Array.isArray(entry.pain) ? entry.pain : [];
   draftCardio = entry.cardio && Array.isArray(entry.cardio.steps) && entry.cardio.steps.length
     ? { seeded: false, steps: entry.cardio.steps.map(x => ({ speed: String(x.speed || ''), incline: x.incline ? String(x.incline) : '' })) }
     : null;
@@ -4631,6 +4837,7 @@ async function cancelWorkout(){
   draftDeload = false;
   draftClock = null;
   draftCardio = null;
+  draftPain = [];
   activeType = null; draft = null; draftDate = null; draftNote = '';
   view = edited ? 'history' : 'today';
   render();
@@ -4647,6 +4854,7 @@ async function finishWorkout(){
     ...(draftDeload ? { deload: true } : {}),
     ...(minutes ? { minutes } : {}),
     ...(walk.length ? { cardio: { steps: walk } } : {}),
+    ...(activeType === PAIN_TYPE && draftPain.length ? { pain: draftPain } : {}),
     exercises: draft.map(ex => ({
       name: ex.name,
       isTime: ex.isTime,
@@ -4676,6 +4884,7 @@ async function finishWorkout(){
   draftDeload = false;
   draftClock = null;
   draftCardio = null;
+  draftPain = [];
   activeType = null; draft = null; draftDate = null; draftNote = '';
   view = edited ? 'history' : 'today';
   if (profile) program = buildProgram(profile);
@@ -5273,7 +5482,7 @@ function monthGrid(year, month){
   for (let day = 1; day <= total; day++){
     const ds = todayStr(new Date(year, month, day));
     const s = sessions.find(x => x.date === ds);
-    days.push({ day, ds, letter: s ? s.type : null, isToday: ds === todayStr() });
+    days.push({ day, ds, letter: s ? (s.type === PAIN_TYPE ? 'Щ' : s.type) : null, isToday: ds === todayStr() });
   }
   return days;
 }
@@ -5400,6 +5609,7 @@ function renderToday(){
         <p class="exercise-preview">${program[type].map(e=>e.name).join(' · ')}</p>
         ${recoveryNote(type) ? `<p class="quiz-sub" style="margin:0 0 14px;">${recoveryNote(type)}</p>` : ''}
         <button class="btn btn-primary" onclick="startWorkout('${type}')">Начать тренировку</button>
+        <button class="btn btn-outline" style="margin-top:10px;" onclick="openPain()">Что-то болит</button>
       </div>
     `;
   }
@@ -5592,6 +5802,7 @@ function renderWorkout(){
         <p class="eyebrow">${TYPE_LABELS[activeType]}${draftDate ? ' · ' + dayText(draftDate) : ''}</p>
         <button class="wo-edit" onclick="openOrder()">Порядок и состав</button>
       </div>
+      ${activeType === PAIN_TYPE ? `<p class="swap-note" style="margin:0 0 10px;">${draftPain.length ? draftPain.map(a => PAIN_PHRASE[a] || a).join(', ').replace(/^./, c => c.toUpperCase()) + ': упражнения подобраны без нагрузки на ' + (draftPain.length > 1 ? 'эти места' : 'это место') : 'Упражнения подобраны по вашему выбору'}. Убрать или добавить упражнение можно в «Порядок и состав».</p>` : ''}
       ${draftDeload ? `<p class="swap-note" style="margin:0 0 10px;">Разгрузочная неделя: вес ${Math.round(DELOAD_LOAD * 100)}% от обычного, подходов на один меньше, без отказа.</p>` : ''}
       ${autoHint}
       ${pairHint}
@@ -6079,7 +6290,7 @@ function renderHistory(){
       <details class="hist-item">
         <summary>
           <span>${formatDateRu(s.date)}</span>
-          <span class="row-value">Тип ${s.type}${s.minutes ? ' · ' + minutesText(s.minutes) : ''}${s.deload ? ' · разгрузка' : ''}${icon('chevron')}</span>
+          <span class="row-value">${s.type === PAIN_TYPE ? 'Щадящая' : 'Тип ' + s.type}${s.minutes ? ' · ' + minutesText(s.minutes) : ''}${s.deload ? ' · разгрузка' : ''}${icon('chevron')}</span>
         </summary>
         <div class="hist-body">
           ${s.note ? `<p class="hist-note top">💬 ${escapeHtml(s.note)}</p>` : ''}
@@ -6491,11 +6702,12 @@ function render(){
     app.innerHTML = renderHeader() + '<p class="empty">Загрузка…</p>';
     return;
   }
-  const activeTab = view === 'workout' ? 'today' : view;
+  const activeTab = view === 'workout' || view === 'pain' ? 'today' : view;
   const bare = view === 'quiz' || view === 'login' || view === 'error';
   let body = '';
   if (view === 'today') body = renderToday();
   else if (view === 'workout') body = renderWorkout();
+  else if (view === 'pain') body = renderPain();
   else if (view === 'exercises') body = renderExercises();
   else if (view === 'settings') body = renderSettings();
   else if (view === 'history') body = renderHistory();
