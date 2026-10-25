@@ -5584,7 +5584,9 @@ function renderWorkout(){
   const autoHint = !autoSeen && draft.some(e => e.sets.some(isAuto))
     ? `<p class="adv-hint" style="margin:8px 0 16px;">Серые цифры — как в прошлый раз. Сделали так же — нажмите галочку, иначе впишите своё. Серые подходы без галочки в дневник не попадут.</p>`
     : '';
+  // Ходьба обычно идёт до тренировки, поэтому блок стоит первым.
   return `
+    ${renderCardio()}
     <div class="card">
       <div class="wo-head">
         <p class="eyebrow">${TYPE_LABELS[activeType]}${draftDate ? ' · ' + dayText(draftDate) : ''}</p>
@@ -5595,7 +5597,6 @@ function renderWorkout(){
       ${pairHint}
       ${exercisesHtml}
     </div>
-    ${renderCardio()}
     <div class="card">
       <p class="eyebrow">Как прошла тренировка</p>
       <textarea class="note-input autogrow" rows="2" maxlength="500" placeholder="Самочувствие, что мешало, что получилось"
