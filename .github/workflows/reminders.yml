@@ -12,4 +12,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Проверить, кому пора напомнить
-        run: curl -fsS -X POST https://training-log-vert-psi.vercel.app/api/cron
+          # Секрет тот же, что в переменной ADMIN_SECRET на Vercel; хранится
+      # в Settings → Secrets and variables → Actions этого репозитория.
+      run: curl -fsS -X POST -H "Authorization: Bearer ${{ secrets.ADMIN_SECRET }}" https://training-log-vert-psi.vercel.app/api/cron
