@@ -1566,7 +1566,7 @@ const HOWTO = {
     e: ['Отрыв поясницы от пола', 'Опускание ног рывком']
   }
 };
-const TYPE_LABELS = { A: 'Тренировка A', B: 'Тренировка B', C: 'Тренировка C', S: 'Щадящая тренировка' };
+const TYPE_LABELS = { A: 'Тренировка A', B: 'Тренировка B', C: 'Тренировка C', S: 'Замена тренировки' };
 const SPLITS = { 2: ['A', 'B'], 3: ['A', 'B', 'C'] };
 function activeDays(){
   return SPLITS[split] || SPLITS[2];
@@ -1951,7 +1951,7 @@ let progressOpen = null;   // у какого упражнения раскры�
 let howtoOpen = null;      // у какого упражнения раскрыта техника
 let draftNote = '';        // заметка ко всей тренировке
 let draftPain = [];        // что болело, когда собирали щадящую тренировку: back / shoulders / knees
-let painAreas = [];        // экран «Что-то болит»: выбранные места
+let painAreas = [];        // экран «Замена тренировки»: больные места (сейчас не спрашиваем, всегда пусто)
 let painGroups = [];       // и выбранные группы мышц
 let draftCardio = null;    // ходьба на дорожке: { steps: [{ speed, incline }] по минутам, seeded — серые цифры прошлого раза }
 let draftDate = null;      // правим прошлую тренировку — её дата, иначе сегодня
@@ -2033,7 +2033,7 @@ function formatDateRu(dateStr){
 }
 function nextType(){
   const days = activeDays();
-  // Щадящая тренировка — вне очереди: после неё ждёт та же, что ждала бы без неё.
+  // Замена тренировки — вне очереди: после неё ждёт та же, что ждала бы без неё.
   const regular = sessions.filter(s => s.type !== PAIN_TYPE);
   const last = regular.length ? regular[regular.length - 1].type : null;
   return days[(days.indexOf(last) + 1) % days.length];
@@ -3509,9 +3509,11 @@ function renderCardio(){
     </div>
   `;
 }
-// ---------- «Что-то болит» ---------------------------------------------------------------
-// Из выбранных групп мышц собирается тренировка без упражнений, которые нагружают больное
-// место. Тип у такой тренировки свой: очередь A/B она не сдвигает.
+// ---------- «Замена тренировки» ---------------------------------------------------------------
+// Из выбранных групп мышц собирается тренировка вместо запланированной. Раньше здесь же
+// спрашивали, что болит, и убирали упражнения с нагрузкой на это место — таблица PAIN_STRESS
+// и учёт мест (painAreas) остались, чтобы старые «щадящие» тренировки читались как прежде.
+// Тип у такой тренировки свой: очередь A/B она не сдвигает.
 const PAIN_TYPE = 'S';
 const PAIN_AREAS = [['back', 'Спина / поясница'], ['shoulders', 'Плечи'], ['knees', 'Колени']];
 const PAIN_PHRASE = { back: 'болит спина / поясница', shoulders: 'болят плечи', knees: 'болят колени' };
@@ -3635,10 +3637,6 @@ function cancelPain(){
   view = 'today';
   render();
 }
-function togglePainArea(id){
-  painAreas = painAreas.includes(id) ? painAreas.filter(x => x !== id) : [...painAreas, id];
-  render();
-}
 function togglePainGroup(group){
   painGroups = painGroups.includes(group) ? painGroups.filter(x => x !== group) : [...painGroups, group];
   render();
@@ -3661,25 +3659,20 @@ function startPain(){
   saveAll();
 }
 function renderPain(){
-  const plan = painPlan(painAreas, painGroups);
-  const areaChips = PAIN_AREAS.map(([id, label]) => `<button class="${painAreas.includes(id) ? 'on' : ''}" onclick="togglePainArea('${id}')">${label}</button>`).join('');
+  const plan = painPlan([], painGroups);
   const groupChips = GROUPS.map(g => `<button class="${painGroups.includes(g) ? 'on' : ''}" onclick="togglePainGroup('${g}')">${g}</button>`).join('');
   const rows = plan.list.map(x => `<div class="pain-row"><b>${escapeHtml(x.name)}</b><span>${x.group}</span></div>`).join('');
   const empty = plan.empty.length
-    ? `<p class="swap-note" style="margin:10px 0 0;">${plan.empty.map(g => '«' + g + '»').join(', ')}: без нагрузки на больное место подходящего нет, пропускаем.</p>` : '';
+    ? `<p class="swap-note" style="margin:10px 0 0;">${plan.empty.map(g => '«' + g + '»').join(', ')}: подходящих упражнений не нашлось, пропускаем.</p>` : '';
   const preview = !painGroups.length
     ? `<p class="swap-note" style="margin:0;">Выберите, что качаем, и здесь появится тренировка.</p>`
-    : plan.list.length ? rows + empty : `<p class="swap-note" style="margin:0;">Для такого сочетания ничего не нашлось. Выберите другие группы или снимите место.</p>`;
+    : plan.list.length ? rows + empty : `<p class="swap-note" style="margin:0;">Для такого сочетания ничего не нашлось. Выберите другие группы.</p>`;
   return `
     <div class="card">
-      <p class="eyebrow">Что-то болит</p>
-      <p class="quiz-title" style="margin:0 0 6px;">Что болит?</p>
-      <div class="pick">${areaChips}</div>
-      <p class="swap-note" style="margin:10px 0 0;">Упражнения, которые нагружают это место, не предложим. Можно ничего не выбирать. Боль острая, отдаёт в ногу или руку, после травмы — лучше к врачу, а не в зал.</p>
-    </div>
-    <div class="card">
+      <p class="eyebrow">Замена тренировки</p>
       <p class="quiz-title" style="margin:0 0 6px;">Что качаем сегодня?</p>
       <div class="pick">${groupChips}</div>
+      <p class="swap-note" style="margin:10px 0 0;">Соберём тренировку из выбранных групп вместо запланированной. Очередь тренировок она не сдвинет.</p>
     </div>
     <div class="card">
       <p class="eyebrow">Получится</p>
@@ -4249,7 +4242,7 @@ function buildAiText(weeks){
   }
   parts.push('Обозначения: вес×повторения; Р — разминка, Д — дропсет, ★ — новый рекорд.');
   const blocks = list.map(x => {
-    const lines = [dayText(x.date) + ' · ' + (x.type === PAIN_TYPE ? 'Щадящая тренировка' + (Array.isArray(x.pain) && x.pain.length ? ' (болело: ' + x.pain.map(a => (PAIN_AREAS.find(p => p[0] === a) || [a, a])[1].toLowerCase()).join(', ') + ')' : '') : 'Тренировка ' + x.type) + (x.minutes ? ' · ' + minutesText(x.minutes) : '') + (x.deload ? ' · разгрузочная неделя' : '') + ':'];
+    const lines = [dayText(x.date) + ' · ' + (x.type === PAIN_TYPE ? (Array.isArray(x.pain) && x.pain.length ? 'Щадящая тренировка (болело: ' + x.pain.map(a => (PAIN_AREAS.find(p => p[0] === a) || [a, a])[1].toLowerCase()).join(', ') + ')' : 'Замена тренировки') : 'Тренировка ' + x.type) + (x.minutes ? ' · ' + minutesText(x.minutes) : '') + (x.deload ? ' · разгрузочная неделя' : '') + ':'];
     x.exercises.forEach(ex => {
       // Разминка в текст тоже идёт — с пометкой «Р»: по ней видно, как человек подходит к рабочему весу.
       const sets = ex.sets.filter(st => Number(ex.isTime ? st.value1 : st.value2) > 0);
@@ -5663,7 +5656,7 @@ function renderToday(){
         <p class="exercise-preview">${program[type].map(e=>e.name).join(' · ')}</p>
         ${recoveryNote(type) ? `<p class="quiz-sub" style="margin:0 0 14px;">${recoveryNote(type)}</p>` : ''}
         <button class="btn btn-primary" onclick="startWorkout('${type}')">Начать тренировку</button>
-        <button class="btn btn-outline" style="margin-top:10px;" onclick="openPain()">Что-то болит</button>
+        <button class="btn btn-outline" style="margin-top:10px;" onclick="openPain()">Замена тренировки</button>
       </div>
     `;
   }
@@ -6344,7 +6337,7 @@ function renderHistory(){
       <details class="hist-item">
         <summary>
           <span>${formatDateRu(s.date)}</span>
-          <span class="row-value">${s.type === PAIN_TYPE ? 'Щадящая' : 'Тип ' + s.type}${s.minutes ? ' · ' + minutesText(s.minutes) : ''}${s.deload ? ' · разгрузка' : ''}${icon('chevron')}</span>
+          <span class="row-value">${s.type === PAIN_TYPE ? (Array.isArray(s.pain) && s.pain.length ? 'Щадящая' : 'Замена') : 'Тип ' + s.type}${s.minutes ? ' · ' + minutesText(s.minutes) : ''}${s.deload ? ' · разгрузка' : ''}${icon('chevron')}</span>
         </summary>
         <div class="hist-body">
           ${s.note ? `<p class="hist-note top">💬 ${escapeHtml(s.note)}</p>` : ''}
