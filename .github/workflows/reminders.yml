@@ -12,4 +12,4 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Проверить, кому пора напомнить
-        run: curl -fsS -X POST -H "Authorization: Bearer ${{ secrets.ADMIN_SECRET }}" https://training-log-vert-psi.vercel.app/api/cron
+        run: 'curl -fsS -X POST -H "Authorization: Bearer ${{ secrets.ADMIN_SECRET }}" https://training-log-vert-psi.vercel.app/api/cron'
