@@ -2403,6 +2403,12 @@ async function authRequest(body){
 function escapeHtml(s){
   return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 }
+// Строка внутри inline-обработчика (onclick="f('...')"): сначала экранируем
+// её как JS-строку, потом как HTML-атрибут — иначе кавычка или угловая
+// скобка из названия упражнения развалили бы разметку и выполнили бы чужой код.
+function jsStr(s){
+  return escapeHtml(String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'"));
+}
 // Копия данных на телефоне: с ней приложение открывается и работает без сети.
 function cacheKey(){
   const id = session && session.token ? session.token.split('.')[0] : '';
@@ -4603,8 +4609,8 @@ function swapList(type, slotIndex, current, today){
         ? 'Замена останется и на следующие тренировки.'
         : 'Замена только на эту тренировку — в программе всё останется как есть.'}</p>` : ''}
       ${options.map(v => `
-        <button class="swap-option ${v.name === current ? 'on' : ''}" onclick="${pick}('${type}',${slotIndex},'${v.name.replace(/'/g, "\\'")}')">
-          <span>${v.name}<span class="swap-eq">${EQ_LABELS[v.eq]}${today && v.name === planned && v.name !== current ? ' · по программе' : ''}</span></span>
+        <button class="swap-option ${v.name === current ? 'on' : ''}" onclick="${pick}('${type}',${slotIndex},'${jsStr(v.name)}')">
+          <span>${escapeHtml(v.name)}<span class="swap-eq">${EQ_LABELS[v.eq]}${today && v.name === planned && v.name !== current ? ' · по программе' : ''}</span></span>
           ${v.name === current ? `<span class="check">${icon('check')}</span>` : ''}
         </button>
       `).join('')}
@@ -4742,7 +4748,7 @@ function addResults(){
     && (!q || it.name.toLowerCase().includes(q)));
   if (!list.length) return '<p class="swap-note">Ничего не нашлось.</p>';
   return list.map(it => `
-    <button class="swap-option" onclick="addToWorkout('${it.name.replace(/'/g, "\\'")}')">
+    <button class="swap-option" onclick="addToWorkout('${jsStr(it.name)}')">
       <span>${escapeHtml(it.name)}<span class="swap-eq">${groupOf(it.name) || 'без группы'}${it.eq ? ' · ' + EQ_LABELS[it.eq] : ' · своё'}</span></span>
     </button>
   `).join('');
@@ -5799,12 +5805,12 @@ function renderWorkout(){
       <div class="exercise">
         <div class="ex-head">
           <div>
-            <h3>${ex.name}</h3>
-            <p class="target">${ex.target}</p>
+            <h3>${escapeHtml(ex.name)}</h3>
+            <p class="target">${escapeHtml(ex.target)}</p>
           </div>
           <div class="ex-actions">
             ${ex.slot != null && !ex.custom ? `<button class="video-btn" onclick="toggleSwap('${activeType}:${ex.slot}')">${icon('stairs')}Заменить</button>` : ''}
-            <button class="video-btn" onclick="toggleHowto('${ex.name.replace(/'/g, "\\'")}')">${icon('aid')}Как делать</button>
+            <button class="video-btn" onclick="toggleHowto('${jsStr(ex.name)}')">${icon('aid')}Как делать</button>
           </div>
         </div>
         ${howtoCard(ex.name)}
@@ -5877,13 +5883,13 @@ function renderExercises(){
         return `
           <div class="lib-row">
             <div>
-              <div class="lib-name">${ex.name}</div>
+              <div class="lib-name">${escapeHtml(ex.name)}</div>
               <div class="target">${targetText(cfg)}, ${cfg.sets} подхода</div>
               ${adv && adv.weight ? `<div class="lib-advice">Рекомендуемый вес: ${loadLabel(ex.name, adv.weight)}</div>` : ''}
             </div>
             <div class="ex-actions">
               ${ex.slot != null && !ex.custom ? `<button class="video-btn" onclick="toggleSwap('${ex.type}:${ex.slot}')">${icon('stairs')}Заменить</button>` : ''}
-              <button class="video-btn" onclick="toggleHowto('${ex.name.replace(/'/g, "\\'")}')">${icon('aid')}Как делать</button>
+              <button class="video-btn" onclick="toggleHowto('${jsStr(ex.name)}')">${icon('aid')}Как делать</button>
             </div>
           </div>
           ${howtoCard(ex.name)}
@@ -5906,19 +5912,19 @@ function renderSettings(){
         const cfg = getConfig(ex);
         return `
           <div class="cfg-row">
-            <div class="cfg-name">${ex.name}</div>
+            <div class="cfg-name">${escapeHtml(ex.name)}</div>
             <div class="cfg-inputs">
               <label>Подходы
                 <input type="number" inputmode="numeric" min="1" max="10" value="${cfg.sets}"
-                  oninput="updateOverride('${ex.name}','sets',this.value)" onchange="commitOverrides()">
+                  oninput="updateOverride('${jsStr(ex.name)}','sets',this.value)" onchange="commitOverrides()">
               </label>
               <label>${cfg.isTime ? 'Сек от' : 'Повт. от'}
                 <input type="number" inputmode="numeric" min="1" max="200" value="${cfg.repsMin}"
-                  oninput="updateOverride('${ex.name}','repsMin',this.value)" onchange="commitOverrides()">
+                  oninput="updateOverride('${jsStr(ex.name)}','repsMin',this.value)" onchange="commitOverrides()">
               </label>
               <label>до
                 <input type="number" inputmode="numeric" min="1" max="200" value="${cfg.repsMax}"
-                  oninput="updateOverride('${ex.name}','repsMax',this.value)" onchange="commitOverrides()">
+                  oninput="updateOverride('${jsStr(ex.name)}','repsMax',this.value)" onchange="commitOverrides()">
               </label>
             </div>
           </div>
@@ -6330,7 +6336,7 @@ function renderHistory(){
       const sets = countedSets(ex);
       if (!sets.length) return '';
       const txt = setsText(ex.isTime, sets, true);
-      return `<div class="hist-ex"><b>${ex.name}</b><br><span class="sets-txt">${txt}</span>${
+      return `<div class="hist-ex"><b>${escapeHtml(ex.name)}</b><br><span class="sets-txt">${txt}</span>${
         ex.note ? `<br><span class="hist-note">💬 ${escapeHtml(ex.note)}</span>` : ''}</div>`;
     }).join('') + walkHtml) || '<div class="hist-ex"><span class="sets-txt">Ничего не записано</span></div>';
     return `
@@ -6343,11 +6349,11 @@ function renderHistory(){
           ${s.note ? `<p class="hist-note top">💬 ${escapeHtml(s.note)}</p>` : ''}
           ${exHtml}
           <div class="hist-actions">
-            <button class="btn btn-outline" onclick="editSession('${s.date}')">Изменить</button>
-            <button class="btn btn-outline danger" onclick="deleteSession('${s.date}')">${deleteArmed === s.date ? 'Точно удалить?' : 'Удалить'}</button>
+            <button class="btn btn-outline" onclick="editSession('${jsStr(s.date)}')">Изменить</button>
+            <button class="btn btn-outline danger" onclick="deleteSession('${jsStr(s.date)}')">${deleteArmed === s.date ? 'Точно удалить?' : 'Удалить'}</button>
           </div>
           <div class="hist-actions" style="margin-top:0;">
-            <button class="btn btn-outline" onclick="shareWorkout('${s.date}')" ${shareBusy ? 'disabled' : ''}>${shareBusy === s.date ? 'Рисую…' : 'Прислать карточкой в чат'}</button>
+            <button class="btn btn-outline" onclick="shareWorkout('${jsStr(s.date)}')" ${shareBusy ? 'disabled' : ''}>${shareBusy === s.date ? 'Рисую…' : 'Прислать карточкой в чат'}</button>
           </div>
           ${shareNote && shareNote.date === s.date ? `<p class="swap-note" style="margin:4px 0 0;">${escapeHtml(shareNote.text)}</p>` : ''}
         </div>
@@ -6397,8 +6403,8 @@ function renderProgress(){
       `;
     return `
       <div class="progress-item">
-        <button class="progress-row ${open ? 'open' : ''}" onclick="toggleExerciseChart('${ex.name.replace(/'/g, "\\'")}')">
-          <span class="pname">${ex.name}</span><span class="pval">${val}</span>
+        <button class="progress-row ${open ? 'open' : ''}" onclick="toggleExerciseChart('${jsStr(ex.name)}')">
+          <span class="pname">${escapeHtml(ex.name)}</span><span class="pval">${val}</span>
         </button>
         ${chart}
         ${rmText}
@@ -6690,7 +6696,7 @@ function renderQuizResult(){
         const range = ex.repsMin === ex.repsMax ? ex.repsMin : ex.repsMin + '–' + ex.repsMax;
         const adv = weightAdvice(ex, a);
         const load = adv && adv.weight ? `<span class="plan-load">${loadLabel(ex.name, adv.weight, true)}</span>` : '';
-        return `<div class="plan-row"><span>${ex.name}</span><span class="plan-sets">${ex.sets} × ${range}${ex.isTime ? ' сек' : ''}${load}</span></div>`;
+        return `<div class="plan-row"><span>${escapeHtml(ex.name)}</span><span class="plan-sets">${ex.sets} × ${range}${ex.isTime ? ' сек' : ''}${load}</span></div>`;
       }).join('')}
     </div>
   `;

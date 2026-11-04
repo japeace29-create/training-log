@@ -1,6 +1,6 @@
 const crypto = require('crypto');
 const { kvCommand, kvGet, kvSet } = require('./_lib');
-const { siteUrl, safeEqual, webhookSecret, botRequest } = require('./_auth');
+const { siteUrl, safeEqual, webhookSecret, botRequest, adminAuthorized } = require('./_auth');
 const compete = require('./_compete');
 
 function userValue(user) {
@@ -100,6 +100,15 @@ async function handleCallback(cb, site) {
 module.exports = async (req, res) => {
   try {
     if (req.method === 'GET' && new URL(req.url, 'http://localhost').searchParams.get('setup')) {
+      // Перенастройка бота — только с секретом: /api/setup?secret=...
+      if (!adminAuthorized(req)) {
+        res.status(403).json({
+          error: process.env.ADMIN_SECRET
+            ? 'Forbidden: откройте /api/setup?secret=ВАШ_ADMIN_SECRET'
+            : 'Не задан ADMIN_SECRET: добавьте его в переменные окружения Vercel'
+        });
+        return;
+      }
       await setup(req, res);
       return;
     }

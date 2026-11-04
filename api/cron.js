@@ -1,5 +1,5 @@
 const { kvCommand } = require('./_lib');
-const { siteUrl, botRequest } = require('./_auth');
+const { siteUrl, botRequest, adminAuthorized } = require('./_auth');
 const { summarize, summaryText, shiftMonth } = require('./_summary');
 const compete = require('./_compete');
 
@@ -104,6 +104,16 @@ function weightText(data, local){
 
 module.exports = async (req, res) => {
   try {
+    // Этот адрес дёргает только планировщик (GitHub Actions). Без секрета —
+    // отказ, иначе кто угодно мог бы запускать рассылку сообщений.
+    if (!adminAuthorized(req)) {
+      res.status(403).json({
+        error: process.env.ADMIN_SECRET
+          ? 'Forbidden'
+          : 'Не задан ADMIN_SECRET: добавьте его в переменные окружения Vercel и в Secrets репозитория на GitHub'
+      });
+      return;
+    }
     // Защита от частых вызовов: запуск не чаще раза в минуту.
     const fresh = await kvCommand(['SET', 'training-log:cron', String(Date.now()), 'EX', 55, 'NX']);
     if (fresh !== 'OK') {

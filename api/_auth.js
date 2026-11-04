@@ -28,6 +28,19 @@ function webhookSecret() {
   return hmac(botToken(), 'training-log-webhook').toString('hex');
 }
 
+// Служебные вызовы без пользователя (cron из GitHub Actions, первичная
+// настройка бота) закрыты общим секретом из переменных окружения Vercel.
+// Принимаем его в заголовке Authorization: Bearer ... или в ?secret=...
+// (так удобнее открыть настройку руками из браузера).
+function adminAuthorized(req) {
+  const secret = process.env.ADMIN_SECRET || '';
+  if (!secret) return false;
+  const bearer = /^Bearer (.+)$/.exec(req.headers.authorization || '');
+  const query = new URL(req.url, 'http://localhost').searchParams.get('secret');
+  const token = bearer ? bearer[1] : (query || '');
+  return !!token && safeEqual(token, secret);
+}
+
 function sessionSignature(payload) {
   return hmac(hmac(botToken(), 'training-log-session'), payload).toString('base64url');
 }
@@ -94,6 +107,7 @@ module.exports = {
   siteUrl,
   safeEqual,
   webhookSecret,
+  adminAuthorized,
   signSession,
   userIdFromRequest,
   verifyInitData,
